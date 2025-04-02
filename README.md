@@ -10,7 +10,7 @@ Lightweight, persistent, thread-safe, disk-based collection classes written in C
 
 - Remove expiration
 - Migrate existing implementation to `PersistentList`, `PersistentQueue`, and `PersistentStack`
-- Rename package to `PersistentCollections`
+- Rename package to `PersistentCollection`
 
 ## Getting Started
 

@@ -998,16 +998,29 @@
                 var orderedItems = indexMap.OrderBy(kvp => kvp.Value).ToList();
 
                 T[] result = new T[orderedItems.Count];
-                for (int i = 0; i < orderedItems.Count; i++)
+
+                // Read all file data inside the semaphore lock
+                List<byte[]> allData = new List<byte[]>();
+                foreach (var item in orderedItems)
                 {
-                    byte[] data = GetBytes(orderedItems[i].Key);
-                    result[i] = _Deserializer(data);
+                    string actualKey = GetKey(item.Key);
+                    byte[] data = File.ReadAllBytes(actualKey);
+                    allData.Add(data);
                 }
+
+                // Now deserialize (no need for lock during this CPU-bound work)
+                _Semaphore.Release();
+                for (int i = 0; i < allData.Count; i++)
+                {
+                    result[i] = _Deserializer(allData[i]);
+                }
+
                 return result;
             }
-            finally
+            catch
             {
                 _Semaphore.Release();
+                throw;
             }
         }
 
@@ -1138,7 +1151,7 @@
 
             string filename = GetKey(_IndexFile);
 
-            List<string> updatedLines = new List<string>();
+            List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
 
             lock (_IndexFileLock)
             {
@@ -1146,18 +1159,44 @@
                     File.WriteAllBytes(filename, Array.Empty<byte>());
 
                 string[] lines = File.ReadAllLines(filename);
+                int removedIndex = -1;
 
+                // First pass: find the index of the removed key and build the current index map
                 if (lines != null && lines.Length > 0)
                 {
                     for (int i = 0; i < lines.Length; i++)
                     {
                         KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
                         if (line == null) continue;
-                        if (!line.Value.Key.Equals(key)) updatedLines.Add(line.Value.Key + " " + line.Value.Value.ToString());
+
+                        if (line.Value.Key.Equals(key))
+                        {
+                            removedIndex = line.Value.Value; // Store the index of the removed item
+                        }
+                        else
+                        {
+                            updatedIndices.Add(line.Value);
+                        }
                     }
                 }
 
-                File.WriteAllLines(filename, updatedLines);
+                // Second pass: adjust indices for the remaining items to maintain sequence
+                if (removedIndex >= 0)
+                {
+                    List<string> finalLines = new List<string>();
+                    foreach (var pair in updatedIndices)
+                    {
+                        int adjustedIndex = pair.Value;
+                        if (adjustedIndex > removedIndex)
+                        {
+                            // Decrement indices for all items that were after the removed item
+                            adjustedIndex--;
+                        }
+                        finalLines.Add(pair.Key + " " + adjustedIndex.ToString());
+                    }
+
+                    File.WriteAllLines(filename, finalLines);
+                }
             }
         }
 

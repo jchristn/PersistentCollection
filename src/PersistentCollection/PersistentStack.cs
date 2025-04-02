@@ -418,10 +418,52 @@
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
 
-            string key = GetKeyByIndex(index);
-            if (string.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            byte[] data = null;
+            string key = null;
 
-            byte[] data = Pop(key, remove);
+            _Semaphore.Wait();
+            try
+            {
+                key = GetKeyByIndex(index);
+                if (string.IsNullOrEmpty(key))
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+
+                // Get the data first
+                string actualKey = GetKey(key);
+                int size = GetFileSize(key);
+                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                {
+                    data = new byte[size];
+                    fs.Read(data, 0, size);
+                }
+
+                // Only remove and update indices if needed
+                if (remove)
+                {
+                    // Remove the key from the index
+                    RemoveFromIndex(key);
+
+                    // Update all other indices
+                    Dictionary<string, int> indexMap = GetIndexMap();
+                    foreach (var kvp in indexMap)
+                    {
+                        if (kvp.Value > index)
+                        {
+                            // Decrement indices for items after the removed one
+                            AddToIndex(kvp.Key, kvp.Value - 1);
+                        }
+                    }
+
+                    // Delete the file
+                    File.Delete(actualKey);
+                    DataRemoved?.Invoke(this, key);
+                }
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
+
             try
             {
                 return Serializer.DeserializeJson<T>(data);
@@ -602,7 +644,7 @@
             if (_ClearOnDispose)
             {
                 Clear();
-                Directory.Delete(_Directory);
+                Directory.Delete(_Directory, true);
             }
 
             _Directory = null;
@@ -689,12 +731,18 @@
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
 
+            // Check for cancellation before starting
+            token.ThrowIfCancellationRequested();
+
             string key = Guid.NewGuid().ToString();
 
-            await _Semaphore.WaitAsync();
+            await _Semaphore.WaitAsync(token);
 
             try
             {
+                // Check for cancellation again after acquiring the semaphore
+                token.ThrowIfCancellationRequested();
+
                 using (FileStream fs = new FileStream(GetKey(key), FileMode.OpenOrCreate, FileAccess.Write))
                 {
                     await fs.WriteAsync(data, 0, data.Length, token).ConfigureAwait(false);
@@ -714,6 +762,24 @@
                         AddToIndex(kvp.Key, kvp.Value + 1);
                     }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // Cleanup if cancelled after starting the file write
+                try
+                {
+                    string actualKey = GetKey(key);
+                    if (File.Exists(actualKey))
+                    {
+                        File.Delete(actualKey);
+                    }
+                    RemoveFromIndex(key);
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+                throw; // Re-throw the cancellation exception
             }
             finally
             {
@@ -758,10 +824,28 @@
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
 
-            string key = GetKeyByIndex(index);
-            if (string.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            _Semaphore.Wait();
+            try
+            {
+                string key = GetKeyByIndex(index);
+                if (string.IsNullOrEmpty(key))
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
 
-            return Pop(key, false);
+                // Get the data within the same lock scope to prevent race conditions
+                string actualKey = GetKey(key);
+                int size = GetFileSize(key);
+
+                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                {
+                    byte[] data = new byte[size];
+                    fs.Read(data, 0, size);
+                    return data;
+                }
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
         }
 
         /// <summary>
@@ -770,10 +854,11 @@
         /// <param name="key">Key, if a specific key is needed.</param>
         /// <param name="purge">Boolean flag indicating whether or not the entry should be removed from the stack once read.</param>
         /// <returns>Data.</returns>
-        public byte[] Pop(string key = null, bool purge = false)
+        public byte[] Pop(string key = null, bool purge = true)
         {
             byte[] ret = null;
             string actualKey = null;
+            int removedIndex = -1;
 
             _Semaphore.Wait();
 
@@ -781,54 +866,83 @@
             {
                 if (String.IsNullOrEmpty(key))
                 {
-                    // Get latest by index (highest index = most recently added)
-                    var indexMap = GetIndexMap();
-                    if (indexMap.Count > 0)
+                    // Get the item at index 0 (top of stack)
+                    Dictionary<string, int> indexMap = GetIndexMap();
+                    if (indexMap.Count == 0)
+                        return null;
+
+                    // Find the key with index 0 (newest item)
+                    foreach (var kvp in indexMap)
                     {
-                        var latestEntry = indexMap.OrderByDescending(kvp => kvp.Value).First();
-                        key = latestEntry.Key;
-                    }
-                    else
-                    {
-                        // Fallback to timestamp if index is empty
-                        key = GetLatestKey();
+                        if (kvp.Value == 0)
+                        {
+                            key = kvp.Key;
+                            removedIndex = 0;
+                            break;
+                        }
                     }
 
-                    if (String.IsNullOrEmpty(key)) return null;
-
-                    actualKey = GetKey(key);
-                    int size = GetFileSize(key);
-
-                    using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
-                    {
-                        ret = new byte[size];
-                        fs.Read(ret, 0, size);
-                    }
+                    if (key == null)
+                        return null;
                 }
                 else
                 {
-                    // Get specific
-                    if (!KeyExists(key)) throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
-
-                    actualKey = GetKey(key);
-                    int size = GetFileSize(key);
-
-                    using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                    // Get the index of the key if we're purging
+                    if (purge)
                     {
-                        ret = new byte[size];
-                        fs.Read(ret, 0, size);
+                        Dictionary<string, int> indexMap = GetIndexMap();
+                        foreach (var kvp in indexMap)
+                        {
+                            if (kvp.Key == key)
+                            {
+                                removedIndex = kvp.Value;
+                                break;
+                            }
+                        }
                     }
+                }
+
+                if (!KeyExists(key))
+                    throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
+
+                actualKey = GetKey(key);
+                int size = GetFileSize(key);
+
+                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                {
+                    ret = new byte[size];
+                    fs.Read(ret, 0, size);
+                }
+
+                if (purge)
+                {
+                    // Remove from index first
+                    RemoveFromIndex(key);
+
+                    // Now update all other indices if needed
+                    if (removedIndex >= 0)
+                    {
+                        Dictionary<string, int> indexMap = GetIndexMap();
+                        foreach (var kvp in indexMap)
+                        {
+                            if (kvp.Value > removedIndex)
+                            {
+                                // Decrement indices for items after the removed one
+                                AddToIndex(kvp.Key, kvp.Value - 1);
+                            }
+                        }
+                    }
+
+                    // Now delete the file
+                    if (File.Exists(actualKey))
+                        File.Delete(actualKey);
+
+                    DataRemoved?.Invoke(this, key);
                 }
             }
             finally
             {
                 _Semaphore.Release();
-            }
-
-            if (purge)
-            {
-                RemoveFromIndex(key);
-                Purge(key);
             }
 
             return ret;
@@ -841,7 +955,7 @@
         /// <param name="purge">Boolean flag indicating whether or not the entry should be removed from the stack once read.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>Data.</returns>
-        public async Task<byte[]> PopAsync(string key = null, bool purge = false, CancellationToken token = default)
+        public async Task<byte[]> PopAsync(string key = null, bool purge = true, CancellationToken token = default)
         {
             byte[] ret = null;
             string actualKey = null;
@@ -1155,7 +1269,8 @@
             string key = GetKeyByIndex(index);
             if (string.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
 
-            Purge(key);
+            // Use the modified Pop method which handles index updates properly
+            Pop(key, true);
         }
 
         /// <summary>
@@ -1355,11 +1470,27 @@
 
         private string GetKeyByIndex(int index)
         {
+            if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
+
             Dictionary<string, int> indexMap = GetIndexMap();
+            string key = null;
+
+            // More robust search through the index map
             foreach (var kvp in indexMap)
             {
-                if (kvp.Value == index) return kvp.Key;
+                if (kvp.Value == index)
+                {
+                    key = kvp.Key;
+                    break;
+                }
             }
+
+            // Verify the key exists as a file
+            if (!string.IsNullOrEmpty(key) && KeyExists(key))
+            {
+                return key;
+            }
+
             return null;
         }
 
