@@ -1,4 +1,4 @@
-![alt tag](https://github.com/jchristn/PersistentCollection/blob/main/src/PersistentCollections/Assets/icon.png?raw=true)
+![alt tag](https://github.com/jchristn/PersistentCollection/blob/main/src/PersistentCollection/Assets/icon.png?raw=true)
 
 # PersistentCollection
 
