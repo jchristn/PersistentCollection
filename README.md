@@ -1,53 +1,59 @@
-![alt tag](https://github.com/jchristn/PQueue/blob/main/src/PQueue/Assets/icon.png?raw=true)
+![alt tag](https://github.com/jchristn/PersistentCollection/blob/main/src/PersistentCollections/Assets/icon.png?raw=true)
 
-# PQueue
+# PersistentCollection
 
-[![NuGet Version](https://img.shields.io/nuget/v/PQueue.svg?style=flat)](https://www.nuget.org/packages/PQueue/) [![NuGet](https://img.shields.io/nuget/dt/PQueue.svg)](https://www.nuget.org/packages/PQueue) 
+[![NuGet Version](https://img.shields.io/nuget/v/PersistentCollection.svg?style=flat)](https://www.nuget.org/packages/PersistentCollection/) [![NuGet](https://img.shields.io/nuget/dt/PersistentCollection.svg)](https://www.nuget.org/packages/PersistentCollection) 
 
-Lightweight, persistent, thread-safe, disk-based queue written in C#. 
+Lightweight, persistent, thread-safe, disk-based collection classes written in C# for queue, stack, and list.  All classes leverage a temporary directory for storage to enable persistence across instantiations of the object or restarts of the software.
 
-## New in v1.0.x
+## New in v2.0.x
 
-- Initial release
-- Added expiration to queued data
+- Remove expiration
+- Migrate existing implementation to `PersistentList`, `PersistentQueue`, and `PersistentStack`
+- Rename package to `PersistentCollections`
 
 ## Getting Started
 
 Refer to the ```Test``` project for a working example.
 
+### PersistentList
+
+`PersistentList` mimics the behavior of `System.Collections.Generic.List<T>`.
+
 ```csharp
-using PQueue;
+using PersistentCollection;
 
-PersistentQueue queue = null;
-queue = new PersistentQueue("./temp/");        // persist data even after disposed
-queue = new PersistentQueue("./temp/", true);  // delete data after disposed
+PersistentList<string> myList = new PersistentList<string>("./temp"); // data directory
+myList.Add("foo");
+myList.Add("bar");
+string val = myList.Get(1);
+myList.RemoveAt(1);
+```
 
-string key = null;
+### PersistentQueue
 
-// Add to the queue...
-key = queue.Enqueue("Hello, world!");            
-key = await queue.EnqueueAsync("Hello, world!"); // async
+`PersistentQueue` mimics the behavior of `System.Collections.Generic.Queue<T>`.
 
-// Add to the queue with expiration...
-key = queue.Enqueue("Hello, world!", DateTime.Parse("1/10/2024 01:23:45"));              
-key = await queue.EnqueueAsync("Hello, world!", DateTime.Parse("1/10/2024 01:23:45")); // async
+```csharp
+using PersistentCollection;
 
-(string, byte[])? data = null;
-data = queue.Dequeue();                // get the latest
-data = queue.Dequeue(key);             // get a specific entry
-data = queue.Dequeue(key, true);       // get a specific entry and delete it
-data = await.queue.DequeueAsync(key);  // get a specific entry asynchronously
+PersistentQueue<string> myQueue = new PersistentQueue<string>("./temp"); // data directory
+myQueue.Enqueue("foo");
+myQueue.Enqueue("bar");
+string val = myQueue.Dequeue(); // foo
+```
 
-if (data != null) 
-  Console.WriteLine(data.Item1 + ": " + Encoding.UTF8.GetString(data.Item2));
+### PersistentStack
 
-queue.Purge(key);  // delete a specific entry
-queue.Expire(key); // expire a specific entry
+`PersistentStack` mimics the behavior of `System.Collections.Generic.Stack<T>`.
 
-DateTime? expiry = queue.GetExpiration(key); // get the expiration time of a specific entry
+```csharp
+using PersistentCollection;
 
-Console.WriteLine("Queue depth  : " + queue.Depth);
-Console.WriteLine("Queue length : " + queue.Length + " bytes");
+PersistentStack<string> myStack = new PersistentStack<string>("./temp"); // data directory
+myStack.Push("foo");
+myStack.Push("bar");
+string val = myStack.Pop(); // bar
 ```
 
 ## Version History

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>net48;net8.0</TargetFrameworks>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Content Remove="C:\Users\joelc\.nuget\packages\inputty\1.0.5\contentFiles\any\net6.0\Inputty.xml" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Inputty" Version="1.0.12" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\PersistentCollection\PersistentCollection.csproj" />
+	</ItemGroup>
+
+</Project>

@@ -2,10 +2,14 @@
 
 ## Current Version
 
-v1.0.x
+v2.0.x
 
-- Initial release
+- Remove expiration
+- Migrate existing implementation to `PersistentList`, `PersistentQueue`, and `PersistentStack`
+- Rename package to `PersistentCollections`
 
 ## Previous Versions
 
-Notes from previous versions will be moved here.
+v1.0.x
+
+- Initial release
