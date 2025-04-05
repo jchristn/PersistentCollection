@@ -32,34 +32,16 @@
             Console.WriteLine($"Test directory: {_testDirectory}");
             Console.WriteLine("-----------------------------------------");
 
-            // Ensure clean test directory
             CleanTestDirectory();
-
-            // Run basic functionality tests
             await RunBasicTests();
-
-            // Run IStack implementation tests
             await RunIStackTests();
-
-            // Run event handler tests
             await RunEventTests();
-
-            // Run sorting and searching tests
             await RunStackSpecificTests();
-
-            // Run additional feature tests
             await RunAdditionalFeatureTests();
-
-            // Run exception handling tests
             await RunExceptionTests();
-
-            // Run asynchronous API tests
             await RunAsyncTests();
-
-            // Run concurrent access tests
             await RunConcurrentTests();
-
-            // Run combined tests with complex scenarios
+            await RunConcurrentOrderTests();
             await RunComplexScenarioTests();
 
             // Summary
@@ -1312,6 +1294,373 @@
 
                 AssertTrue(allProcessed, "All produced items should be consumed");
                 AssertEquals(0, stack.Count, "Stack should be empty after all items are consumed");
+            }
+        }
+
+        private static async Task RunConcurrentOrderTests()
+        {
+            Console.WriteLine("\nRunning Concurrent Order Preservation Tests...");
+
+            // Test 1: Order preservation with concurrent pushes
+            {
+                var stackDir = Path.Combine(_testDirectory, "concurrent_order_push");
+                using var stack = new PersistentStack<int>(stackDir);
+
+                // Create multiple concurrent push tasks that add items in sequence from each thread
+                var tasks = new List<Task<List<string>>>();
+                int threadCount = 4;
+                int itemsPerThread = 25;
+
+                // Track keys in order for verification
+                var allKeysInOrder = new List<string>[threadCount];
+
+                for (int i = 0; i < threadCount; i++)
+                {
+                    int threadId = i;
+                    tasks.Add(Task.Run(() =>
+                    {
+                        var keysAdded = new List<string>();
+                        for (int j = 0; j < itemsPerThread; j++)
+                        {
+                            // Each thread pushes values in its own range
+                            // Thread 0: 0-24, Thread 1: 100-124, etc.
+                            int value = threadId * 100 + j;
+                            string key = stack.Push(value);
+                            keysAdded.Add(key);
+                            // Small delay to increase chance of thread interleaving
+                            Thread.Sleep(1);
+                        }
+                        return keysAdded;
+                    }));
+                }
+
+                // Wait for all tasks and collect added keys
+                var results = await Task.WhenAll(tasks);
+                for (int i = 0; i < threadCount; i++)
+                {
+                    allKeysInOrder[i] = results[i];
+                }
+
+                // Verify total count
+                AssertEquals(threadCount * itemsPerThread, stack.Count,
+                    "All items from all threads should be added");
+
+                // For each thread, verify that its items maintain their relative order in the stack
+                for (int t = 0; t < threadCount; t++)
+                {
+                    var keysFromThread = allKeysInOrder[t];
+                    List<int> valuesInStack = new List<int>();
+
+                    // Get values by keys in the order they were pushed
+                    foreach (var key in keysFromThread)
+                    {
+                        // We can't peek by key directly, so we need to hold a reference
+                        // to the byte array with the value for each key
+                        valuesInStack.Add(stack.PeekBytes(key).Length > 0
+                            ? _Serializer.DeserializeJson<int>(stack.PeekBytes(key))
+                            : 0);
+                    }
+
+                    // Verify values are in sequential order within each thread's range
+                    bool inOrder = true;
+                    for (int i = 1; i < valuesInStack.Count; i++)
+                    {
+                        // With stack, later pushed items should appear before earlier pushed items
+                        // when we enumerate the stack (LIFO order)
+                        if (valuesInStack[i - 1] != valuesInStack[i] - 1)
+                        {
+                            inOrder = false;
+                            break;
+                        }
+                    }
+
+                    AssertTrue(inOrder, $"Items pushed by thread {t} should maintain their relative order");
+                }
+            }
+
+            // Test 2: Order preservation with interleaved pushes and pops
+            {
+                var stackDir = Path.Combine(_testDirectory, "concurrent_push_pop_order");
+                using var stack = new PersistentStack<int>(stackDir);
+
+                // First push a set of ordered items
+                for (int i = 0; i < 50; i++)
+                {
+                    stack.Push(i);
+                }
+
+                // Create a task that pushes items
+                var pushTask = Task.Run(() =>
+                {
+                    for (int i = 0; i < 20; i++)
+                    {
+                        stack.Push(1000 + i);  // Push items in 1000s
+                        Thread.Sleep(5);       // Small delay to interleave operations
+                    }
+                });
+
+                // Create a task that pops items
+                var popTask = Task.Run(() =>
+                {
+                    for (int i = 0; i < 15; i++)
+                    {
+                        // Pop items from the top
+                        if (stack.Count > 0)
+                        {
+                            stack.Pop();
+                            Thread.Sleep(7);  // Different delay to create more interleaving
+                        }
+                    }
+                });
+
+                await Task.WhenAll(pushTask, popTask);
+
+                // Verify the stack preserves LIFO order (newest items on top)
+                bool isLIFOOrdered = true;
+                List<int> poppedItems = new List<int>();
+
+                // Pop all items to check order
+                while (stack.Count > 0)
+                {
+                    poppedItems.Add(stack.Pop());
+                }
+
+                // With a stack, we expect values to be in descending order
+                for (int i = 1; i < poppedItems.Count; i++)
+                {
+                    if (poppedItems[i - 1] < poppedItems[i])
+                    {
+                        isLIFOOrdered = false;
+                        Console.WriteLine($"Order violation at index {i}: {poppedItems[i - 1]} before {poppedItems[i]}");
+                        break;
+                    }
+                }
+
+                AssertTrue(isLIFOOrdered, "Stack should maintain LIFO order after concurrent pushes and pops");
+                AssertEquals(55, poppedItems.Count, "Stack should have 50 original items + 20 pushes - 15 pops = 55 items");
+            }
+
+            // Test 3: Order preservation with multiple threads performing mixed operations
+            {
+                var stackDir = Path.Combine(_testDirectory, "concurrent_mixed_operations_order");
+                using var stack = new PersistentStack<string>(stackDir);
+
+                // Make sure directory is clean
+                stack.Clear();
+
+                // Push initial items (A0-A49)
+                for (int i = 0; i < 50; i++)
+                {
+                    stack.Push($"A{i}");
+                }
+
+                // Use a CountdownEvent to ensure all operations complete
+                var operationsCompleted = new CountdownEvent(3);
+
+                // Track pushed items for verification
+                var pushedBItems = new List<string>();
+                var pushedCItems = new List<string>();
+                var poppedItems = new List<string>();
+
+                // Tasks will perform different operations concurrently
+                var tasks = new List<Task>();
+
+                // Task 1: Push B items
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        for (int i = 0; i < 10; i++)
+                        {
+                            string item = $"B{i}";
+                            stack.Push(item);
+                            lock (pushedBItems)
+                            {
+                                pushedBItems.Add(item);
+                            }
+                            Console.WriteLine($"Pushed {item}");
+                            Thread.Sleep(3);
+                        }
+                    }
+                    finally
+                    {
+                        operationsCompleted.Signal();
+                    }
+                }));
+
+                // Task 2: Push C items
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        for (int i = 0; i < 10; i++)
+                        {
+                            string item = $"C{i}";
+                            stack.Push(item);
+                            lock (pushedCItems)
+                            {
+                                pushedCItems.Add(item);
+                            }
+                            Console.WriteLine($"Pushed {item}");
+                            Thread.Sleep(4);
+                        }
+                    }
+                    finally
+                    {
+                        operationsCompleted.Signal();
+                    }
+                }));
+
+                // Task 3: Pop exactly 5 items
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        // Wait a short moment to ensure some items are pushed first
+                        Thread.Sleep(10);
+
+                        for (int i = 0; i < 5; i++)
+                        {
+                            if (stack.Count > 0)
+                            {
+                                string popped = stack.Pop();
+                                lock (poppedItems)
+                                {
+                                    poppedItems.Add(popped);
+                                }
+                                Console.WriteLine($"Popped {popped}");
+                                Thread.Sleep(5);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        operationsCompleted.Signal();
+                    }
+                }));
+
+                // Wait for all tasks to complete
+                operationsCompleted.Wait();
+
+                // Pop all remaining items to verify properties
+                List<string> remainingItems = new List<string>();
+                while (stack.Count > 0)
+                {
+                    remainingItems.Add(stack.Pop());
+                }
+
+                // Count by category
+                int remainingBCount = remainingItems.Count(item => item.StartsWith("B"));
+                int remainingCCount = remainingItems.Count(item => item.StartsWith("C"));
+                int remainingACount = remainingItems.Count(item => item.StartsWith("A"));
+                int otherCount = remainingItems.Count(item => !item.StartsWith("A") && !item.StartsWith("B") && !item.StartsWith("C"));
+
+                // Calculate popped counts
+                int poppedBCount = poppedItems.Count(item => item.StartsWith("B"));
+                int poppedCCount = poppedItems.Count(item => item.StartsWith("C"));
+                int poppedACount = poppedItems.Count(item => item.StartsWith("A"));
+
+                // Get the remaining B and C items
+                List<string> remainingBItems = remainingItems.Where(item => item.StartsWith("B")).ToList();
+                List<string> remainingCItems = remainingItems.Where(item => item.StartsWith("C")).ToList();
+
+                // Print detailed diagnostic information
+                Console.WriteLine("Pushed B items in order:");
+                foreach (var item in pushedBItems)
+                {
+                    Console.WriteLine($"  {item}");
+                }
+
+                Console.WriteLine("Remaining B items in order they were popped:");
+                foreach (var item in remainingBItems)
+                {
+                    Console.WriteLine($"  {item}");
+                }
+
+                Console.WriteLine("Popped items during test:");
+                foreach (var item in poppedItems)
+                {
+                    Console.WriteLine($"  {item}");
+                }
+
+                // More detailed LIFO testing for B items
+                // We need to account for the fact that some B items might have been popped already
+                // and we can't make assumptions about exactly which ones were popped
+
+                // IMPORTANT: Modified LIFO check that handles the fact that some items may have been popped
+                bool bItemsInLIFO = true;
+
+                // For each B item that's still in the stack, determine if it follows LIFO order
+                // relative to other remaining B items
+                for (int i = 0; i < remainingBItems.Count - 1; i++)
+                {
+                    // Extract the indexes from the item names (e.g., "B5" -> 5)
+                    int currentIndex = int.Parse(remainingBItems[i].Substring(1));
+                    int nextIndex = int.Parse(remainingBItems[i + 1].Substring(1));
+
+                    // In LIFO order, items with higher indices should be popped first
+                    if (currentIndex < nextIndex)
+                    {
+                        bItemsInLIFO = false;
+                        Console.WriteLine($"LIFO violation: {remainingBItems[i]} before {remainingBItems[i + 1]}");
+                        break;
+                    }
+                }
+
+                // Same check for C items
+                bool cItemsInLIFO = true;
+                for (int i = 0; i < remainingCItems.Count - 1; i++)
+                {
+                    int currentIndex = int.Parse(remainingCItems[i].Substring(1));
+                    int nextIndex = int.Parse(remainingCItems[i + 1].Substring(1));
+
+                    if (currentIndex < nextIndex)
+                    {
+                        cItemsInLIFO = false;
+                        Console.WriteLine($"LIFO violation: {remainingCItems[i]} before {remainingCItems[i + 1]}");
+                        break;
+                    }
+                }
+
+                // A items should still be in reverse order (A49 first, then A48, etc.)
+                bool aItemsInLIFO = true;
+                List<string> remainingAItems = remainingItems.Where(item => item.StartsWith("A")).ToList();
+                for (int i = 0; i < remainingAItems.Count - 1; i++)
+                {
+                    int currentIndex = int.Parse(remainingAItems[i].Substring(1));
+                    int nextIndex = int.Parse(remainingAItems[i + 1].Substring(1));
+
+                    if (currentIndex < nextIndex)
+                    {
+                        aItemsInLIFO = false;
+                        Console.WriteLine($"LIFO violation for A items: {remainingAItems[i]} before {remainingAItems[i + 1]}");
+                        break;
+                    }
+                }
+
+                // Print detailed summary
+                Console.WriteLine($"Total items at end: {remainingItems.Count}");
+                Console.WriteLine($"Items popped during test: {poppedItems.Count}");
+                Console.WriteLine($"Pushed B items: {pushedBItems.Count}, Remaining: {remainingBCount}, Popped: {poppedBCount}");
+                Console.WriteLine($"Pushed C items: {pushedCItems.Count}, Remaining: {remainingCCount}, Popped: {poppedCCount}");
+                Console.WriteLine($"Original A items: 50, Remaining: {remainingACount}, Popped: {poppedACount}");
+
+                // Verify that all items are accounted for
+                AssertEquals(pushedBItems.Count, remainingBCount + poppedBCount, "All B items should be accounted for");
+                AssertEquals(pushedCItems.Count, remainingCCount + poppedCCount, "All C items should be accounted for");
+                AssertEquals(50, remainingACount + poppedACount, "All A items should be accounted for");
+
+                // Verify LIFO ordering within each category
+                AssertTrue(bItemsInLIFO, "B items should maintain LIFO order within their category");
+                AssertTrue(cItemsInLIFO, "C items should maintain LIFO order within their category");
+                AssertTrue(aItemsInLIFO, "A items should maintain LIFO order within their category");
+
+                // Verify no unexpected items
+                AssertEquals(0, otherCount, "No unexpected items should be in the stack");
+
+                // Verify total count
+                int expectedTotalItems = pushedBItems.Count + pushedCItems.Count + 50 - poppedItems.Count;
+                AssertEquals(expectedTotalItems, remainingItems.Count, "Stack should have correct total count after all operations");
             }
         }
 

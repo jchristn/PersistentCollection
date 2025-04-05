@@ -27,18 +27,39 @@
             get
             {
                 _Semaphore.Wait();
-
                 try
                 {
-                    string[] files = Directory.GetFiles(_Directory, "*", SearchOption.TopDirectoryOnly);
-                    if (files != null)
+                    // Use the index file as the source of truth
+                    lock (_IndexFileLock)
                     {
-                        files = files.Where(f => !Path.GetFileName(f).Equals(_IndexFile)).ToArray();
-                        return files.Length;
-                    }
-                    else
-                    {
-                        return 0;
+                        var indexMap = GetIndexMap();
+
+                        // Log the count for debugging
+                        if (indexMap.Count >= 60)  // Only log suspicious values
+                        {
+                            Console.WriteLine($"WARN: High queue count detected: {indexMap.Count}");
+
+                            // Verify the files actually exist for each index entry
+                            int actualFiles = 0;
+                            foreach (var key in indexMap.Keys)
+                            {
+                                string filePath = GetKey(key);
+                                if (File.Exists(filePath))
+                                {
+                                    actualFiles++;
+                                }
+                            }
+
+                            Console.WriteLine($"WARN: Index entries: {indexMap.Count}, Actual files: {actualFiles}");
+
+                            // This could help diagnose the issue
+                            if (actualFiles < indexMap.Count)
+                            {
+                                Console.WriteLine("WARN: Index contains entries for files that don't exist!");
+                            }
+                        }
+
+                        return indexMap.Count;
                     }
                 }
                 finally
@@ -185,9 +206,12 @@
                 _Deserializer = bytes => System.Text.Json.JsonSerializer.Deserialize<T>(bytes);
             }
 
-            // Create index file if it doesn't exist
-            if (!File.Exists(GetKey(_IndexFile)))
-                File.WriteAllBytes(GetKey(_IndexFile), Array.Empty<byte>());
+            // Create index file if it doesn't exist - do this inside the lock
+            lock (_IndexFileLock)
+            {
+                if (!File.Exists(GetKey(_IndexFile)))
+                    File.WriteAllBytes(GetKey(_IndexFile), Array.Empty<byte>());
+            }
         }
 
         /// <summary>
@@ -198,10 +222,10 @@
         /// <param name="deserializer">Function to deserialize byte array to T.</param>
         /// <param name="clearOnDispose">Clear the queue's contents on dispose. This will delete saved data.</param>
         public PersistentQueue(
-            string directory,
-            Func<T, byte[]> serializer,
-            Func<byte[], T> deserializer,
-            bool clearOnDispose = false)
+    string directory,
+    Func<T, byte[]> serializer,
+    Func<byte[], T> deserializer,
+    bool clearOnDispose = false)
         {
             if (String.IsNullOrEmpty(directory)) throw new ArgumentNullException(nameof(directory));
             _Serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
@@ -211,9 +235,12 @@
             InitializeDirectory();
             _ClearOnDispose = clearOnDispose;
 
-            // Create index file if it doesn't exist
-            if (!File.Exists(GetKey(_IndexFile)))
-                File.WriteAllBytes(GetKey(_IndexFile), Array.Empty<byte>());
+            // Create index file if it doesn't exist - do this inside the lock
+            lock (_IndexFileLock)
+            {
+                if (!File.Exists(GetKey(_IndexFile)))
+                    File.WriteAllBytes(GetKey(_IndexFile), Array.Empty<byte>());
+            }
         }
 
         #endregion
@@ -258,8 +285,11 @@
                     fs.Write(data, 0, data.Length);
                 }
 
-                // Get next index and update index file atomically
-                AddToIndexWithNextIndex(key);
+                lock (_IndexFileLock)
+                {
+                    // Get next index and update index file atomically
+                    AddToIndexWithNextIndex(key);
+                }
             }
             finally
             {
@@ -284,7 +314,7 @@
             byte[] data = _Serializer(item);
             string key = Guid.NewGuid().ToString();
 
-            await _Semaphore.WaitAsync(token);
+            await _Semaphore.WaitAsync(token).ConfigureAwait(false);
 
             try
             {
@@ -293,8 +323,11 @@
                     await fs.WriteAsync(data, 0, data.Length, token).ConfigureAwait(false);
                 }
 
-                // Get next index and update index file atomically
-                AddToIndexWithNextIndex(key);
+                lock (_IndexFileLock)
+                {
+                    // Get next index and update index file atomically
+                    AddToIndexWithNextIndex(key);
+                }
             }
             finally
             {
@@ -316,24 +349,64 @@
             byte[] data = null;
 
             _Semaphore.Wait();
-
             try
             {
-                // Get oldest key (smallest index)
-                var indexMap = GetIndexMap();
-                if (indexMap.Count == 0)
-                    throw new InvalidOperationException("Queue empty");
-
-                var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
-                key = orderedKeys.First().Key;
-
-                string actualKey = GetKey(key);
-                int size = GetFileSize(key);
-
-                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                lock (_IndexFileLock)
                 {
-                    data = new byte[size];
-                    fs.Read(data, 0, size);
+                    var indexMap = GetIndexMap();
+                    if (indexMap.Count == 0)
+                        throw new InvalidOperationException("Queue empty");
+
+                    var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
+                    key = orderedKeys.First().Key;
+
+                    // Only proceed if the file actually exists
+                    string actualKey = GetKey(key);
+                    if (!File.Exists(actualKey))
+                    {
+                        // File doesn't exist but is in the index - fix the index and retry
+                        Console.WriteLine($"WARN: File missing for key {key} - fixing index");
+                        RemoveFromIndex(key);
+
+                        // Try again with the fixed index
+                        indexMap = GetIndexMap();
+                        if (indexMap.Count == 0)
+                            throw new InvalidOperationException("Queue empty");
+
+                        orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
+                        key = orderedKeys.First().Key;
+                        actualKey = GetKey(key);
+
+                        if (!File.Exists(actualKey))
+                        {
+                            // Still can't find a valid file, give up
+                            throw new InvalidOperationException("No valid queue items found");
+                        }
+                    }
+
+                    try
+                    {
+                        // Read the data
+                        data = File.ReadAllBytes(actualKey);
+
+                        // Delete the file
+                        File.Delete(actualKey);
+
+                        // Update the index
+                        RemoveFromIndex(key);
+
+                        // Log success
+                        Console.WriteLine($"DEBUG: Successfully dequeued key {key}");
+                    }
+                    catch (IOException ex)
+                    {
+                        // Log the error
+                        Console.WriteLine($"ERROR in Dequeue: {ex.Message}");
+
+                        // Still try to maintain index consistency
+                        RemoveFromIndex(key);
+                        throw new InvalidOperationException("Error accessing queue item", ex);
+                    }
                 }
             }
             finally
@@ -341,9 +414,8 @@
                 _Semaphore.Release();
             }
 
-            Remove(key);
+            // Success - notify listeners
             DataDequeued?.Invoke(this, key);
-
             return _Deserializer(data);
         }
 
@@ -362,22 +434,51 @@
             }
 
             byte[] data = null;
-            string actualKey = null;
 
             _Semaphore.Wait();
-
             try
             {
-                if (!KeyExists(key))
-                    throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
-
-                actualKey = GetKey(key);
-                int size = GetFileSize(key);
-
-                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                lock (_IndexFileLock)
                 {
-                    data = new byte[size];
-                    fs.Read(data, 0, size);
+                    if (!KeyExists(key))
+                        throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
+
+                    string actualKey = GetKey(key);
+                    try
+                    {
+                        if (File.Exists(actualKey))
+                        {
+                            data = File.ReadAllBytes(actualKey);
+
+                            if (remove)
+                            {
+                                // Delete file and update index atomically
+                                File.Delete(actualKey);
+                                RemoveFromIndex(key);
+                            }
+                        }
+                        else
+                        {
+                            // File doesn't exist but is in index - fix the inconsistency
+                            if (remove)
+                            {
+                                RemoveFromIndex(key);
+                            }
+                            throw new KeyNotFoundException("The specified key '" + key + "' cannot be accessed.");
+                        }
+                    }
+                    catch (IOException ex)
+                    {
+                        // Log the exception
+                        ExceptionEncountered?.Invoke(this, ex);
+
+                        if (remove)
+                        {
+                            // Try to continue by removing from index
+                            RemoveFromIndex(key);
+                        }
+                        throw new InvalidOperationException("Error accessing queue item", ex);
+                    }
                 }
             }
             finally
@@ -385,14 +486,18 @@
                 _Semaphore.Release();
             }
 
-            if (remove)
+            // Trigger the event outside the locks
+            if (data != null)
             {
-                Remove(key);
-                RemoveFromIndex(key);
-                DataDequeued?.Invoke(this, key);
+                if (remove)
+                {
+                    DataDequeued?.Invoke(this, key);
+                }
+                return _Deserializer(data);
             }
 
-            return _Deserializer(data);
+            // This should never happen due to the exceptions above, but just in case
+            throw new InvalidOperationException("Failed to dequeue item");
         }
 
         /// <summary>
@@ -403,7 +508,22 @@
         /// <returns>The item at the specified index.</returns>
         public T DequeueAt(int index, bool remove = true)
         {
-            string key = GetKeyByIndex(index);
+            if (index < 0) throw new ArgumentOutOfRangeException(nameof(index), "Index cannot be negative.");
+
+            string key = null;
+            _Semaphore.Wait();
+            try
+            {
+                lock (_IndexFileLock)
+                {
+                    key = GetKeyByIndex(index);
+                }
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
+
             if (string.IsNullOrEmpty(key))
                 throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
 
@@ -418,28 +538,68 @@
         /// <returns>A task with the oldest item.</returns>
         public async Task<T> DequeueAsync(bool remove = true, CancellationToken token = default)
         {
+            if (!remove)
+                return await PeekAsync(token).ConfigureAwait(false);
+
             string key = null;
             byte[] data = null;
 
-            await _Semaphore.WaitAsync(token);
-
+            await _Semaphore.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                // Get oldest key (smallest index)
-                var indexMap = GetIndexMap();
-                if (indexMap.Count == 0)
-                    throw new InvalidOperationException("Queue empty");
-
-                var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
-                key = orderedKeys.First().Key;
-
-                string actualKey = GetKey(key);
-                int size = GetFileSize(key);
-
-                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                lock (_IndexFileLock)
                 {
-                    data = new byte[size];
-                    await fs.ReadAsync(data, 0, size, token).ConfigureAwait(false);
+                    var indexMap = GetIndexMap();
+                    if (indexMap.Count == 0)
+                        throw new InvalidOperationException("Queue empty");
+
+                    var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
+                    key = orderedKeys.First().Key;
+
+                    // Only proceed if the file actually exists
+                    string actualKey = GetKey(key);
+                    if (!File.Exists(actualKey))
+                    {
+                        // File doesn't exist but is in the index - fix the index and retry
+                        Console.WriteLine($"WARN: File missing for key {key} - fixing index");
+                        RemoveFromIndex(key);
+
+                        // Try again with the fixed index
+                        indexMap = GetIndexMap();
+                        if (indexMap.Count == 0)
+                            throw new InvalidOperationException("Queue empty");
+
+                        orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
+                        key = orderedKeys.First().Key;
+                        actualKey = GetKey(key);
+
+                        if (!File.Exists(actualKey))
+                        {
+                            // Still can't find a valid file, give up
+                            throw new InvalidOperationException("No valid queue items found");
+                        }
+                    }
+
+                    try
+                    {
+                        // Read the data
+                        data = File.ReadAllBytes(actualKey);
+
+                        // Delete the file
+                        File.Delete(actualKey);
+
+                        // Update the index
+                        RemoveFromIndex(key);
+                    }
+                    catch (IOException ex)
+                    {
+                        // Log the error
+                        Console.WriteLine($"ERROR in DequeueAsync: {ex.Message}");
+
+                        // Still try to maintain index consistency
+                        RemoveFromIndex(key);
+                        throw new InvalidOperationException("Error accessing queue item", ex);
+                    }
                 }
             }
             finally
@@ -447,16 +607,10 @@
                 _Semaphore.Release();
             }
 
-            if (remove)
-            {
-                Remove(key);
-                RemoveFromIndex(key);
-                DataDequeued?.Invoke(this, key);
-            }
-
+            // Success - notify listeners
+            DataDequeued?.Invoke(this, key);
             return _Deserializer(data);
         }
-
 
         /// <summary>
         /// Retrieve a specific item from the queue asynchronously.
@@ -474,22 +628,52 @@
             }
 
             byte[] data = null;
-            string actualKey = null;
 
-            await _Semaphore.WaitAsync(token);
-
+            await _Semaphore.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                if (!KeyExists(key))
-                    throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
-
-                actualKey = GetKey(key);
-                int size = GetFileSize(key);
-
-                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                lock (_IndexFileLock)
                 {
-                    data = new byte[size];
-                    await fs.ReadAsync(data, 0, size, token).ConfigureAwait(false);
+                    if (!KeyExists(key))
+                        throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
+
+                    string actualKey = GetKey(key);
+                    try
+                    {
+                        if (File.Exists(actualKey))
+                        {
+                            // Use synchronous read while holding locks
+                            data = File.ReadAllBytes(actualKey);
+
+                            if (remove)
+                            {
+                                // Delete file and update index atomically
+                                File.Delete(actualKey);
+                                RemoveFromIndex(key);
+                            }
+                        }
+                        else
+                        {
+                            // File doesn't exist but is in index - fix the inconsistency
+                            if (remove)
+                            {
+                                RemoveFromIndex(key);
+                            }
+                            throw new KeyNotFoundException("The specified key '" + key + "' cannot be accessed.");
+                        }
+                    }
+                    catch (IOException ex)
+                    {
+                        // Log the exception
+                        ExceptionEncountered?.Invoke(this, ex);
+
+                        if (remove)
+                        {
+                            // Try to continue by removing from index
+                            RemoveFromIndex(key);
+                        }
+                        throw new InvalidOperationException("Error accessing queue item", ex);
+                    }
                 }
             }
             finally
@@ -497,14 +681,18 @@
                 _Semaphore.Release();
             }
 
-            if (remove)
+            // Trigger the event outside the locks
+            if (data != null)
             {
-                Remove(key);
-                RemoveFromIndex(key);
-                DataDequeued?.Invoke(this, key);
+                if (remove)
+                {
+                    DataDequeued?.Invoke(this, key);
+                }
+                return _Deserializer(data);
             }
 
-            return _Deserializer(data);
+            // This should never happen due to the exceptions above, but just in case
+            throw new InvalidOperationException("Failed to dequeue item");
         }
 
         /// <summary>
@@ -516,7 +704,22 @@
         /// <returns>A task with the item at the specified index.</returns>
         public async Task<T> DequeueAtAsync(int index, bool remove = true, CancellationToken token = default)
         {
-            string key = GetKeyByIndex(index);
+            if (index < 0) throw new ArgumentOutOfRangeException(nameof(index), "Index cannot be negative.");
+
+            string key = null;
+            await _Semaphore.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                lock (_IndexFileLock)
+                {
+                    key = GetKeyByIndex(index);
+                }
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
+
             if (string.IsNullOrEmpty(key))
                 throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
 
@@ -536,13 +739,15 @@
 
             try
             {
-                // Get oldest key (smallest index)
-                var indexMap = GetIndexMap();
-                if (indexMap.Count == 0)
-                    throw new InvalidOperationException("Queue empty");
+                lock (_IndexFileLock)
+                {
+                    var indexMap = GetIndexMap();
+                    if (indexMap.Count == 0)
+                        throw new InvalidOperationException("Queue empty");
 
-                var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
-                key = orderedKeys.First().Key;
+                    var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
+                    key = orderedKeys.First().Key;
+                }
 
                 string actualKey = GetKey(key);
                 int size = GetFileSize(key);
@@ -605,16 +810,63 @@
         public byte[] GetBytes(string key)
         {
             if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-            if (!KeyExists(key)) throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
 
-            string actualKey = GetKey(key);
-            int size = GetFileSize(key);
+            byte[] result = null;
+            _Semaphore.Wait();
+
+            try
+            {
+                if (!KeyExists(key)) throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
+                string actualKey = GetKey(key);
+                result = File.ReadAllBytes(actualKey);
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Remove by key.
+        /// </summary>
+        /// <param name="key">Key.</param>
+        public void Remove(string key)
+        {
+            if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 
             _Semaphore.Wait();
 
             try
             {
-                return File.ReadAllBytes(actualKey);
+                string actualKey = GetKey(key);
+                bool exists = File.Exists(actualKey);
+
+                if (exists)
+                {
+                    try
+                    {
+                        File.Delete(actualKey);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        // File was already deleted, ignore
+                    }
+                    catch (IOException ex)
+                    {
+                        // Log the exception or handle file access issues
+                        ExceptionEncountered?.Invoke(this, ex);
+                        throw; // Re-throw to let the caller know about the failure
+                    }
+
+                    lock (_IndexFileLock)
+                    {
+                        RemoveFromIndex(key);
+                    }
+
+                    DataDequeued?.Invoke(this, key);
+                }
             }
             finally
             {
@@ -631,21 +883,25 @@
         public async Task<byte[]> GetBytesAsync(string key, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-            if (!KeyExists(key)) throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
 
             byte[] ret = null;
-            string actualKey = GetKey(key);
-            int size = GetFileSize(key);
-
-            await _Semaphore.WaitAsync(token);
+            await _Semaphore.WaitAsync(token).ConfigureAwait(false);
 
             try
             {
+                if (!KeyExists(key)) throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
+                string actualKey = GetKey(key);
+                int size = GetFileSize(key);
+
                 using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
                 {
                     ret = new byte[size];
                     await fs.ReadAsync(ret, 0, size, token).ConfigureAwait(false);
                 }
+            }
+            catch (FileNotFoundException)
+            {
+                throw new KeyNotFoundException("The specified key '" + key + "' cannot be accessed.");
             }
             finally
             {
@@ -681,25 +937,34 @@
             string key = null;
             byte[] data = null;
 
-            await _Semaphore.WaitAsync(token);
+            await _Semaphore.WaitAsync(token).ConfigureAwait(false);
 
             try
             {
-                // Get oldest key (smallest index)
-                var indexMap = GetIndexMap();
-                if (indexMap.Count == 0)
-                    throw new InvalidOperationException("Queue empty");
+                lock (_IndexFileLock)
+                {
+                    var indexMap = GetIndexMap();
+                    if (indexMap.Count == 0)
+                        throw new InvalidOperationException("Queue empty");
 
-                var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
-                key = orderedKeys.First().Key;
+                    var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
+                    key = orderedKeys.First().Key;
+                }
 
                 string actualKey = GetKey(key);
                 int size = GetFileSize(key);
 
-                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                try
                 {
-                    data = new byte[size];
-                    await fs.ReadAsync(data, 0, size, token).ConfigureAwait(false);
+                    using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                    {
+                        data = new byte[size];
+                        await fs.ReadAsync(data, 0, size, token).ConfigureAwait(false);
+                    }
+                }
+                catch (FileNotFoundException)
+                {
+                    throw new InvalidOperationException("Queue item was deleted concurrently");
                 }
             }
             finally
@@ -732,10 +997,16 @@
             try
             {
                 result = Dequeue();
-                return !EqualityComparer<T>.Default.Equals(result, default);
+                return true;
             }
-            catch
+            catch (InvalidOperationException) // Expected for empty queue
             {
+                result = default;
+                return false;
+            }
+            catch (Exception ex) // Any other exception
+            {
+                ExceptionEncountered?.Invoke(this, ex);
                 result = default;
                 return false;
             }
@@ -791,7 +1062,11 @@
             try
             {
                 var result = await DequeueAsync(remove, token).ConfigureAwait(false);
-                return (!EqualityComparer<T>.Default.Equals(result, default), result);
+                return (true, result);
+            }
+            catch (InvalidOperationException)
+            {
+                return (false, default);
             }
             catch
             {
@@ -809,7 +1084,11 @@
             try
             {
                 var result = await PeekAsync(token).ConfigureAwait(false);
-                return (!EqualityComparer<T>.Default.Equals(result, default), result);
+                return (true, result);
+            }
+            catch (InvalidOperationException)
+            {
+                return (false, default);
             }
             catch
             {
@@ -859,32 +1138,6 @@
         }
 
         /// <summary>
-        /// Remove a specific entry from the queue.
-        /// </summary>
-        /// <param name="key">Key.</param>
-        public void Remove(string key)
-        {
-            if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-
-            string actualKey = GetKey(key);
-
-            _Semaphore.Wait();
-
-            try
-            {
-                if (File.Exists(actualKey))
-                {
-                    File.Delete(actualKey);
-                    RemoveFromIndex(key);
-                }
-            }
-            finally
-            {
-                _Semaphore.Release();
-            }
-        }
-
-        /// <summary>
         /// Remove an entry at the specified index.
         /// </summary>
         /// <param name="index">Zero-based index.</param>
@@ -911,16 +1164,33 @@
                 {
                     if (!file.Name.Equals(_IndexFile)) // Don't delete the index file, just clear it
                     {
-                        file.Delete();
+                        try
+                        {
+                            file.Delete();
+                        }
+                        catch (IOException)
+                        {
+                            // File might be in use, ignore
+                        }
                     }
                 }
 
                 // Clear index file
-                File.WriteAllText(GetKey(_IndexFile), string.Empty);
+                lock (_IndexFileLock)
+                {
+                    File.WriteAllText(GetKey(_IndexFile), string.Empty);
+                }
 
                 foreach (DirectoryInfo dir in _DirectoryInfo.GetDirectories())
                 {
-                    dir.Delete(true);
+                    try
+                    {
+                        dir.Delete(true);
+                    }
+                    catch (IOException)
+                    {
+                        // Directory might be in use, ignore
+                    }
                 }
             }
             finally
@@ -935,17 +1205,49 @@
         /// Returns an enumerator that iterates through the queue in index order.
         /// </summary>
         /// <returns>An enumerator for the queue.</returns>
+        // In GetEnumerator:
         public IEnumerator<T> GetEnumerator()
         {
-            // Get all indices in order and iterate through them
-            Dictionary<string, int> indexMap = GetIndexMap();
-            List<KeyValuePair<string, int>> orderedItems = indexMap
-                .OrderBy(kvp => kvp.Value)
-                .ToList();
+            // Get all data up front, avoiding any yielding with locks held
+            List<T> items = new List<T>();
 
-            foreach (var item in orderedItems)
+            _Semaphore.Wait();
+            try
             {
-                yield return _Deserializer(GetBytes(item.Key));
+                Dictionary<string, int> indexMap;
+
+                lock (_IndexFileLock)
+                {
+                    indexMap = GetIndexMap();
+                }
+
+                // Get all items in order
+                foreach (var kvp in indexMap.OrderBy(kvp => kvp.Value))
+                {
+                    try
+                    {
+                        string actualKey = GetKey(kvp.Key);
+                        if (File.Exists(actualKey))
+                        {
+                            byte[] data = File.ReadAllBytes(actualKey);
+                            items.Add(_Deserializer(data));
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Skip items that can't be accessed
+                    }
+                }
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
+
+            // Now return the items without holding any locks
+            foreach (var item in items)
+            {
+                yield return item;
             }
         }
 
@@ -995,37 +1297,49 @@
         /// <returns>A new array containing copies of the elements of the queue.</returns>
         public T[] ToArray()
         {
+            List<byte[]> allData = new List<byte[]>();
+            List<string> keys;
+
             _Semaphore.Wait();
             try
             {
-                var indexMap = GetIndexMap();
-                var orderedItems = indexMap.OrderBy(kvp => kvp.Value).ToList();
-
-                T[] result = new T[orderedItems.Count];
+                lock (_IndexFileLock)
+                {
+                    var indexMap = GetIndexMap();
+                    keys = indexMap.OrderBy(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+                }
 
                 // Read all file data inside the semaphore lock
-                List<byte[]> allData = new List<byte[]>();
-                foreach (var item in orderedItems)
+                foreach (var key in keys)
                 {
-                    string actualKey = GetKey(item.Key);
-                    byte[] data = File.ReadAllBytes(actualKey);
-                    allData.Add(data);
+                    try
+                    {
+                        if (KeyExists(key))
+                        {
+                            string actualKey = GetKey(key);
+                            byte[] data = File.ReadAllBytes(actualKey);
+                            allData.Add(data);
+                        }
+                    }
+                    catch
+                    {
+                        // Skip items that can't be accessed
+                    }
                 }
-
-                // Now deserialize (no need for lock during this CPU-bound work)
-                _Semaphore.Release();
-                for (int i = 0; i < allData.Count; i++)
-                {
-                    result[i] = _Deserializer(allData[i]);
-                }
-
-                return result;
             }
-            catch
+            finally
             {
                 _Semaphore.Release();
-                throw;
             }
+
+            // Now deserialize the data
+            T[] result = new T[allData.Count];
+            for (int i = 0; i < allData.Count; i++)
+            {
+                result[i] = _Deserializer(allData[i]);
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -1045,11 +1359,14 @@
         /// <returns>A task with the list of keys.</returns>
         public async Task<List<string>> GetKeysAsync(CancellationToken token = default)
         {
-            await _Semaphore.WaitAsync(token);
+            await _Semaphore.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                Dictionary<string, int> indexMap = GetIndexMap();
-                return indexMap.OrderBy(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+                lock (_IndexFileLock)
+                {
+                    Dictionary<string, int> indexMap = GetIndexMap();
+                    return indexMap.OrderBy(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+                }
             }
             finally
             {
@@ -1090,60 +1407,93 @@
         {
             if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 
+            // This method should only be called within a lock(_IndexFileLock) block
             string filename = GetKey(_IndexFile);
 
-            List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
-
-            lock (_IndexFileLock)
+            if (!File.Exists(filename))
             {
-                if (!File.Exists(filename))
-                    File.WriteAllBytes(filename, Array.Empty<byte>());
+                File.WriteAllBytes(filename, Array.Empty<byte>());
+                return; // Nothing to remove if the index file doesn't exist
+            }
 
+            try
+            {
+                // Read all lines
                 string[] lines = File.ReadAllLines(filename);
+                if (lines == null || lines.Length == 0)
+                    return; // Nothing to remove
+
+                // Track if we found the key and its index
+                bool keyFound = false;
                 int removedIndex = -1;
 
-                // First pass: find the index of the removed key and build the current index map
-                if (lines != null && lines.Length > 0)
-                {
-                    for (int i = 0; i < lines.Length; i++)
-                    {
-                        KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
-                        if (line == null) continue;
+                // Process all lines to build new index
+                List<KeyValuePair<string, int>> validEntries = new List<KeyValuePair<string, int>>();
 
-                        if (line.Value.Key.Equals(key))
+                foreach (string line in lines)
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
+
+                    string[] parts = line.Split(new char[] { ' ' }, 2);
+                    if (parts.Length != 2)
+                        continue; // Skip invalid lines
+
+                    string lineKey = parts[0];
+
+                    if (int.TryParse(parts[1], out int lineIndex))
+                    {
+                        if (lineKey.Equals(key))
                         {
-                            removedIndex = line.Value.Value; // Store the index of the removed item
+                            // Found the key we're removing
+                            keyFound = true;
+                            removedIndex = lineIndex;
                         }
                         else
                         {
-                            updatedIndices.Add(line.Value);
+                            // Keep all other entries
+                            validEntries.Add(new KeyValuePair<string, int>(lineKey, lineIndex));
                         }
                     }
                 }
 
-                // Second pass: adjust indices for the remaining items to maintain sequence
-                if (removedIndex >= 0)
+                // If we didn't find the key, nothing to do
+                if (!keyFound)
+                    return;
+
+                // Sort entries by index for reindexing
+                validEntries = validEntries.OrderBy(e => e.Value).ToList();
+
+                // Reindex all entries to be sequential
+                List<string> newLines = new List<string>();
+                for (int i = 0; i < validEntries.Count; i++)
                 {
-                    List<string> finalLines = new List<string>();
-                    foreach (var pair in updatedIndices)
-                    {
-                        int adjustedIndex = pair.Value;
-                        if (adjustedIndex > removedIndex)
-                        {
-                            // Decrement indices for all items that were after the removed item
-                            adjustedIndex--;
-                        }
-                        finalLines.Add(pair.Key + " " + adjustedIndex.ToString());
-                    }
+                    var entry = validEntries[i];
+                    int newIndex = i;
 
-                    File.WriteAllLines(filename, finalLines);
+                    // Adjust index if entry came after the removed item
+                    if (entry.Value > removedIndex)
+                        newIndex = i; // Automatically decremented by the re-indexing
+                    else
+                        newIndex = entry.Value; // Keep the same index
+
+                    newLines.Add($"{entry.Key} {newIndex}");
                 }
+
+                // Write the updated index file
+                File.WriteAllLines(filename, newLines);
+            }
+            catch (Exception ex)
+            {
+                // Log the error but don't rethrow - we need this operation to continue
+                ExceptionEncountered?.Invoke(this, ex);
             }
         }
-            
+
         private string GetKeyByIndex(int index)
         {
-            Dictionary<string, int> indexMap = GetIndexMap();
+            // This method should be called with _IndexFileLock held
+            var indexMap = GetIndexMap();
             foreach (var kvp in indexMap)
             {
                 if (kvp.Value == index) return kvp.Key;
@@ -1189,17 +1539,86 @@
             Dictionary<string, int> indexMap = new Dictionary<string, int>();
             string filename = GetKey(_IndexFile);
 
-            // Note: This method should only be called within a lock(_IndexFileLock) block
-            string[] lines = File.ReadAllLines(filename);
-
-            if (lines != null && lines.Length > 0)
+            if (!File.Exists(filename))
             {
+                File.WriteAllBytes(filename, Array.Empty<byte>());
+                return indexMap;
+            }
+
+            try
+            {
+                string[] lines = File.ReadAllLines(filename);
+                if (lines == null || lines.Length == 0)
+                    return indexMap;
+
+                // First pass: collect all entries from the index
                 for (int i = 0; i < lines.Length; i++)
                 {
+                    if (string.IsNullOrWhiteSpace(lines[i]))
+                        continue;
+
                     KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
                     if (line == null) continue;
-                    indexMap[line.Value.Key] = line.Value.Value;
+
+                    // Only add valid entries
+                    if (!indexMap.ContainsKey(line.Value.Key))
+                    {
+                        indexMap[line.Value.Key] = line.Value.Value;
+                    }
                 }
+
+                // IMPORTANT ADDITION: Verify the files actually exist and rebuild if necessary
+                bool needsRebuild = false;
+                var validEntries = new Dictionary<string, int>();
+
+                foreach (var entry in indexMap)
+                {
+                    string filePath = GetKey(entry.Key);
+                    if (File.Exists(filePath))
+                    {
+                        validEntries[entry.Key] = entry.Value;
+                    }
+                    else
+                    {
+                        // File doesn't exist but is in index
+                        needsRebuild = true;
+                    }
+                }
+
+                // If we found inconsistencies, rebuild the index
+                if (needsRebuild)
+                {
+                    Console.WriteLine("WARN: Index inconsistency detected - rebuilding index");
+
+                    // Sort by index value to maintain order
+                    var orderedEntries = validEntries
+                        .OrderBy(e => e.Value)
+                        .ToList();
+
+                    // Create new index content with sequential indices
+                    var newLines = new List<string>();
+                    for (int i = 0; i < orderedEntries.Count; i++)
+                    {
+                        newLines.Add($"{orderedEntries[i].Key} {i}");
+                    }
+
+                    // Write the rebuilt index
+                    try
+                    {
+                        File.WriteAllLines(filename, newLines);
+
+                        // Update our return value to match the rebuilt index
+                        indexMap = validEntries;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"ERROR: Failed to rebuild index: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Exception in GetIndexMap: {ex.Message}");
             }
 
             return indexMap;
@@ -1211,36 +1630,35 @@
 
             string filename = GetKey(_IndexFile);
 
-            lock (_IndexFileLock)
+            // This method should only be called within a lock(_IndexFileLock) block
+            // Get the current index map
+            Dictionary<string, int> indexMap = GetIndexMap();
+
+            // Calculate next index
+            int nextIndex = indexMap.Count == 0 ? 0 : indexMap.Values.Max() + 1;
+
+            // Add new entry to index file
+            List<string> updatedLines = new List<string>();
+
+            if (File.Exists(filename))
             {
-                // Get the current index map
-                Dictionary<string, int> indexMap = GetIndexMap();
+                string[] lines = File.ReadAllLines(filename);
 
-                // Calculate next index
-                int nextIndex = indexMap.Count == 0 ? 0 : indexMap.Values.Max() + 1;
-
-                // Add new entry to index file
-                List<string> updatedLines = new List<string>();
-
-                if (File.Exists(filename))
+                if (lines != null && lines.Length > 0)
                 {
-                    string[] lines = File.ReadAllLines(filename);
-
-                    if (lines != null && lines.Length > 0)
+                    for (int i = 0; i < lines.Length; i++)
                     {
-                        for (int i = 0; i < lines.Length; i++)
-                        {
-                            KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
-                            if (line == null) continue;
-                            if (!line.Value.Key.Equals(key)) updatedLines.Add(line.Value.Key + " " + line.Value.Value.ToString());
-                        }
+                        KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
+                        if (line == null) continue;
+                        if (!line.Value.Key.Equals(key)) updatedLines.Add(line.Value.Key + " " + line.Value.Value.ToString());
                     }
                 }
-
-                updatedLines.Add(key + " " + nextIndex.ToString());
-                File.WriteAllLines(filename, updatedLines);
             }
+
+            updatedLines.Add(key + " " + nextIndex.ToString());
+            File.WriteAllLines(filename, updatedLines);
         }
+
         #endregion
     }
 }

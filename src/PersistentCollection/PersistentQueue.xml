@@ -693,6 +693,12 @@
             <param name="key">Key of the item.</param>
             <returns>Data as byte array for the specified key.</returns>
         </member>
+        <member name="M:PersistentCollection.PersistentQueue`1.Remove(System.String)">
+            <summary>
+            Remove by key.
+            </summary>
+            <param name="key">Key.</param>
+        </member>
         <member name="M:PersistentCollection.PersistentQueue`1.GetBytesAsync(System.String,System.Threading.CancellationToken)">
             <summary>
             Get data from the queue by key asynchronously.
@@ -782,12 +788,6 @@
             </summary>
             <param name="index">The zero-based index to check.</param>
             <returns>true if an element exists at the specified index; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Remove(System.String)">
-            <summary>
-            Remove a specific entry from the queue.
-            </summary>
-            <param name="key">Key.</param>
         </member>
         <member name="M:PersistentCollection.PersistentQueue`1.RemoveAt(System.Int32)">
             <summary>
@@ -1130,20 +1130,20 @@
             <param name="data">The new data to store.</param>
             <param name="token">Cancellation token.</param>
         </member>
+        <member name="M:PersistentCollection.PersistentStack`1.UpdateByKeyAsync(System.String,`0,System.Threading.CancellationToken)">
+            <summary>
+            Updates an item at a specific key asynchronously.
+            </summary>
+            <param name="key">The key of the item to update.</param>
+            <param name="item">The new data to store.</param>
+            <param name="token">Cancellation token.</param>
+        </member>
         <member name="M:PersistentCollection.PersistentStack`1.UpdateByKey(System.String,`0)">
             <summary>
             Updates an item at a specific key.
             </summary>
             <param name="key">The key of the item to update.</param>
             <param name="item">The new item to store.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.UpdateByKeyAsync(System.String,`0,System.Threading.CancellationToken)">
-            <summary>
-            Updates an item at a specific key asynchronously.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="item">The new item to store.</param>
-            <param name="token">Cancellation token.</param>
         </member>
         <member name="M:PersistentCollection.PersistentStack`1.UpdateAt(System.Int32,`0)">
             <summary>

@@ -337,12 +337,12 @@
         {
             byte[] data = null;
             string key = null;
+            int removedIndex = -1;
 
             _Semaphore.Wait();
 
             try
             {
-                // Get the item at index 0 (top of stack)
                 Dictionary<string, int> indexMap;
                 lock (_IndexFileLock)
                 {
@@ -356,6 +356,7 @@
                         if (kvp.Value == 0)
                         {
                             key = kvp.Key;
+                            removedIndex = 0;
                             break;
                         }
                     }
@@ -376,34 +377,30 @@
                 // Atomically update all indices
                 lock (_IndexFileLock)
                 {
-                    // Get latest index map to handle any concurrent changes
-                    indexMap = GetIndexMap();
-
-                    // Remove the popped item and prepare updated indices
+                    // Create a snapshot of the current indices for updating
                     List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+
                     foreach (var kvp in indexMap)
                     {
-                        if (kvp.Key != key)
-                        {
-                            // Decrement indices for items after the popped one
-                            if (kvp.Value > 0)
-                            {
-                                updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, kvp.Value - 1));
-                            }
-                            else
-                            {
-                                updatedIndices.Add(kvp);
-                            }
-                        }
+                        if (kvp.Key == key) continue; // Skip the removed key
+
+                        // Decrement indices for items after the popped one
+                        int newIndex = kvp.Value > removedIndex ? kvp.Value - 1 : kvp.Value;
+                        updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, newIndex));
                     }
 
                     // Write all updated indices at once
                     SaveIndexMap(updatedIndices);
                 }
 
-                // Delete the file
+                // Delete the file only after indices are updated
                 if (File.Exists(actualKey))
                     File.Delete(actualKey);
+            }
+            catch (Exception ex)
+            {
+                ExceptionEncountered?.Invoke(this, ex);
+                throw;
             }
             finally
             {
@@ -460,18 +457,24 @@
                 // Only remove and update indices if needed
                 if (remove)
                 {
-                    // Remove the key from the index
-                    RemoveFromIndex(key);
-
-                    // Update all other indices
-                    Dictionary<string, int> indexMap = GetIndexMap();
-                    foreach (var kvp in indexMap)
+                    // Atomically update indices
+                    lock (_IndexFileLock)
                     {
-                        if (kvp.Value > index)
+                        Dictionary<string, int> indexMap = GetIndexMap();
+                        List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+
+                        foreach (var kvp in indexMap)
                         {
+                            if (kvp.Key == key)
+                                continue; // Skip the removed key
+
                             // Decrement indices for items after the removed one
-                            AddToIndex(kvp.Key, kvp.Value - 1);
+                            int newIndex = kvp.Value > index ? kvp.Value - 1 : kvp.Value;
+                            updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, newIndex));
                         }
+
+                        // Write all updated indices at once
+                        SaveIndexMap(updatedIndices);
                     }
 
                     // Delete the file
@@ -508,7 +511,7 @@
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             string json = Serializer.SerializeJson(item, false);
-            return Push(json);
+            return Push(Encoding.UTF8.GetBytes(json));
         }
 
         /// <summary>
@@ -711,8 +714,10 @@
                     // Get current index map
                     Dictionary<string, int> indexMap = GetIndexMap();
 
-                    // Move all existing items down one position (increment index)
+                    // Create a new list of indices for atomic update
                     List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+
+                    // Move all existing items down one position (increment index)
                     foreach (var kvp in indexMap)
                     {
                         updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, kvp.Value + 1));
@@ -721,9 +726,60 @@
                     // Add the new item at index 0 (top of stack)
                     updatedIndices.Add(new KeyValuePair<string, int>(key, 0));
 
-                    // Write all updated indices at once
-                    SaveIndexMap(updatedIndices);
+                    // Write all updated indices at once using a temporary file for atomicity
+                    string filename = GetKey(_IndexFile);
+                    string tempFile = filename + ".tmp";
+
+                    try
+                    {
+                        using (StreamWriter writer = new StreamWriter(tempFile, false, Encoding.UTF8))
+                        {
+                            foreach (var kvp in updatedIndices)
+                            {
+                                writer.WriteLine($"{kvp.Key} {kvp.Value}");
+                            }
+                            writer.Flush();
+                        }
+
+                        // Use atomic file replacement
+                        if (File.Exists(filename))
+                            File.Delete(filename);
+
+                        File.Move(tempFile, filename);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error and try normal file write as fallback
+                        ExceptionEncountered?.Invoke(this, ex);
+
+                        List<string> lines = new List<string>();
+                        foreach (var kvp in updatedIndices)
+                        {
+                            lines.Add($"{kvp.Key} {kvp.Value}");
+                        }
+
+                        File.WriteAllLines(filename, lines);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                // Cleanup on error
+                try
+                {
+                    string actualKey = GetKey(key);
+                    if (File.Exists(actualKey))
+                    {
+                        File.Delete(actualKey);
+                    }
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+
+                ExceptionEncountered?.Invoke(this, ex);
+                throw;
             }
             finally
             {
@@ -734,7 +790,6 @@
 
             return key;
         }
-
 
         /// <summary>
         /// Add data to the stack asynchronously.
@@ -782,8 +837,10 @@
                     // Get current index map
                     Dictionary<string, int> indexMap = GetIndexMap();
 
-                    // Move all existing items down one position (increment index)
+                    // Create a new list of indices for atomic update
                     List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+
+                    // Move all existing items down one position (increment index)
                     foreach (var kvp in indexMap)
                     {
                         updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, kvp.Value + 1));
@@ -792,8 +849,40 @@
                     // Add the new item at index 0 (top of stack)
                     updatedIndices.Add(new KeyValuePair<string, int>(key, 0));
 
-                    // Write all updated indices at once
-                    SaveIndexMap(updatedIndices);
+                    // Write all updated indices at once using a temporary file for atomicity
+                    string filename = GetKey(_IndexFile);
+                    string tempFile = filename + ".tmp";
+
+                    try
+                    {
+                        using (StreamWriter writer = new StreamWriter(tempFile, false, Encoding.UTF8))
+                        {
+                            foreach (var kvp in updatedIndices)
+                            {
+                                writer.WriteLine($"{kvp.Key} {kvp.Value}");
+                            }
+                            writer.Flush();
+                        }
+
+                        // Use atomic file replacement
+                        if (File.Exists(filename))
+                            File.Delete(filename);
+
+                        File.Move(tempFile, filename);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error and try normal file write as fallback
+                        ExceptionEncountered?.Invoke(this, ex);
+
+                        List<string> lines = new List<string>();
+                        foreach (var kvp in updatedIndices)
+                        {
+                            lines.Add($"{kvp.Key} {kvp.Value}");
+                        }
+
+                        File.WriteAllLines(filename, lines);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -806,13 +895,48 @@
                     {
                         File.Delete(actualKey);
                     }
-                    RemoveFromIndex(key);
+
+                    // Make sure to remove from index if it was added
+                    lock (_IndexFileLock)
+                    {
+                        Dictionary<string, int> indexMap = GetIndexMap();
+                        if (indexMap.ContainsKey(key))
+                        {
+                            var updatedIndices = indexMap
+                                .Where(kvp => kvp.Key != key)
+                                .Select(kvp => new KeyValuePair<string, int>(
+                                    kvp.Key,
+                                    kvp.Value > 0 ? kvp.Value - 1 : kvp.Value))
+                                .ToList();
+
+                            SaveIndexMap(updatedIndices);
+                        }
+                    }
                 }
                 catch
                 {
                     // Ignore cleanup errors
                 }
                 throw; // Re-throw the cancellation exception
+            }
+            catch (Exception ex)
+            {
+                // Cleanup on other exceptions
+                try
+                {
+                    string actualKey = GetKey(key);
+                    if (File.Exists(actualKey))
+                    {
+                        File.Delete(actualKey);
+                    }
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+
+                ExceptionEncountered?.Invoke(this, ex);
+                throw;
             }
             finally
             {
@@ -834,7 +958,7 @@
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             string json = Serializer.SerializeJson(item, false);
-            return await PushAsync(json, token).ConfigureAwait(false);
+            return await PushAsync(Encoding.UTF8.GetBytes(json), token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -992,84 +1116,92 @@
         {
             byte[] ret = null;
             string actualKey = null;
+            int removedIndex = -1;
 
             await _Semaphore.WaitAsync(token);
 
             try
             {
+                token.ThrowIfCancellationRequested();
+
                 if (String.IsNullOrEmpty(key))
                 {
                     // Get the item at index 0 (top of stack)
-                    Dictionary<string, int> indexMap = GetIndexMap();
-                    if (indexMap.Count == 0)
-                        return null;
-
-                    // Find the key with index 0 (newest item)
-                    foreach (var kvp in indexMap)
+                    Dictionary<string, int> indexMap;
+                    lock (_IndexFileLock)
                     {
-                        if (kvp.Value == 0)
+                        indexMap = GetIndexMap();
+                        if (indexMap.Count == 0)
+                            return null;
+
+                        // Find the key with index 0 (newest item)
+                        foreach (var kvp in indexMap)
                         {
-                            key = kvp.Key;
-                            break;
+                            if (kvp.Value == 0)
+                            {
+                                key = kvp.Key;
+                                removedIndex = 0;
+                                break;
+                            }
                         }
-                    }
 
-                    if (key == null)
-                        return null;
-
-                    actualKey = GetKey(key);
-                    int size = GetFileSize(key);
-
-                    using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
-                    {
-                        ret = new byte[size];
-                        await fs.ReadAsync(ret, 0, size, token).ConfigureAwait(false);
+                        if (key == null)
+                            return null;
                     }
                 }
                 else
                 {
-                    // Get specific key
-                    if (!KeyExists(key))
-                        throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
-
-                    actualKey = GetKey(key);
-                    int size = GetFileSize(key);
-
-                    using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                    // Get the index of the specific key
+                    if (purge)
                     {
-                        ret = new byte[size];
-                        await fs.ReadAsync(ret, 0, size, token).ConfigureAwait(false);
+                        lock (_IndexFileLock)
+                        {
+                            Dictionary<string, int> indexMap = GetIndexMap();
+                            foreach (var kvp in indexMap)
+                            {
+                                if (kvp.Key == key)
+                                {
+                                    removedIndex = kvp.Value;
+                                    break;
+                                }
+                            }
+                        }
                     }
+                }
+
+                if (!KeyExists(key))
+                    throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
+
+                // Read the data
+                actualKey = GetKey(key);
+                int size = GetFileSize(key);
+
+                using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
+                {
+                    ret = new byte[size];
+                    await fs.ReadAsync(ret, 0, size, token).ConfigureAwait(false);
                 }
 
                 if (purge)
                 {
-                    // Remove from index
-                    Dictionary<string, int> indexMap = GetIndexMap();
-                    int removedIndex = -1;
-
-                    // Find the index of the removed item
-                    foreach (var kvp in indexMap)
+                    // Atomically update indices
+                    lock (_IndexFileLock)
                     {
-                        if (kvp.Key == key)
-                        {
-                            removedIndex = kvp.Value;
-                            break;
-                        }
-                    }
+                        Dictionary<string, int> indexMap = GetIndexMap();
+                        List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
 
-                    RemoveFromIndex(key);
-
-                    // Decrement all indices greater than the removed index
-                    if (removedIndex >= 0)
-                    {
                         foreach (var kvp in indexMap)
                         {
-                            if (kvp.Key != key && kvp.Value > removedIndex)
-                            {
-                                AddToIndex(kvp.Key, kvp.Value - 1);
-                            }
+                            if (kvp.Key == key)
+                                continue; // Skip the removed key
+
+                            // Decrement indices for items after the removed one
+                            int newIndex = kvp.Value > removedIndex ? kvp.Value - 1 : kvp.Value;
+                            updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, newIndex));
                         }
+
+                        // Write all updated indices at once
+                        SaveIndexMap(updatedIndices);
                     }
 
                     // Delete the file
@@ -1078,6 +1210,15 @@
 
                     DataRemoved?.Invoke(this, key);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // Re-throw cancellation exceptions
+            }
+            catch (Exception ex)
+            {
+                ExceptionEncountered?.Invoke(this, ex);
+                throw;
             }
             finally
             {
@@ -1124,10 +1265,24 @@
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
 
-            string key = GetKeyByIndex(index);
-            if (string.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            string key = null;
 
+            // Get the key first (outside the semaphore to minimize lock time)
+            await _Semaphore.WaitAsync(token);
+            try
+            {
+                key = GetKeyByIndex(index);
+                if (string.IsNullOrEmpty(key))
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
+
+            // Now use the existing PopAsync method with the key
             byte[] data = await PopAsync(key, remove, token).ConfigureAwait(false);
+
             try
             {
                 return Serializer.DeserializeJson<T>(data);
@@ -1188,11 +1343,18 @@
 
             try
             {
+                token.ThrowIfCancellationRequested();
+
                 string actualKey = GetKey(key);
                 using (FileStream fs = new FileStream(actualKey, FileMode.Truncate, FileAccess.Write))
                 {
                     await fs.WriteAsync(data, 0, data.Length, token).ConfigureAwait(false);
                 }
+            }
+            catch (Exception ex)
+            {
+                ExceptionEncountered?.Invoke(this, ex);
+                throw;
             }
             finally
             {
@@ -1200,6 +1362,22 @@
             }
 
             DataUpdated?.Invoke(this, key);
+        }
+
+        /// <summary>
+        /// Updates an item at a specific key asynchronously.
+        /// </summary>
+        /// <param name="key">The key of the item to update.</param>
+        /// <param name="item">The new data to store.</param>
+        /// <param name="token">Cancellation token.</param>
+        public async Task UpdateByKeyAsync(string key, T item, CancellationToken token = default)
+        {
+            if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
+            if (item == null) throw new ArgumentNullException(nameof(item));
+
+            string json = Serializer.SerializeJson(item, false);
+            byte[] data = Encoding.UTF8.GetBytes(json);
+            await UpdateByKeyAsync(key, data, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1215,22 +1393,6 @@
             string json = Serializer.SerializeJson(item, false);
             byte[] data = Encoding.UTF8.GetBytes(json);
             UpdateByKey(key, data);
-        }
-
-        /// <summary>
-        /// Updates an item at a specific key asynchronously.
-        /// </summary>
-        /// <param name="key">The key of the item to update.</param>
-        /// <param name="item">The new item to store.</param>
-        /// <param name="token">Cancellation token.</param>
-        public async Task UpdateByKeyAsync(string key, T item, CancellationToken token = default)
-        {
-            if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-            if (item == null) throw new ArgumentNullException(nameof(item));
-
-            string json = Serializer.SerializeJson(item, false);
-            byte[] data = Encoding.UTF8.GetBytes(json);
-            await UpdateByKeyAsync(key, data, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1260,8 +1422,19 @@
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
             if (item == null) throw new ArgumentNullException(nameof(item));
 
-            string key = GetKeyByIndex(index);
-            if (string.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            string key = null;
+
+            await _Semaphore.WaitAsync(token);
+            try
+            {
+                key = GetKeyByIndex(index);
+                if (string.IsNullOrEmpty(key))
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
 
             await UpdateByKeyAsync(key, item, token).ConfigureAwait(false);
         }
@@ -1299,11 +1472,46 @@
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
 
-            string key = GetKeyByIndex(index);
-            if (string.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            _Semaphore.Wait();
+            try
+            {
+                string key = GetKeyByIndex(index);
+                if (string.IsNullOrEmpty(key))
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
 
-            // Use the modified Pop method which handles index updates properly
-            Pop(key, true);
+                // Get the full path
+                string actualKey = GetKey(key);
+
+                // Atomically update indices
+                lock (_IndexFileLock)
+                {
+                    Dictionary<string, int> indexMap = GetIndexMap();
+                    List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+
+                    foreach (var kvp in indexMap)
+                    {
+                        if (kvp.Key == key)
+                            continue; // Skip the removed key
+
+                        // Decrement indices for items after the removed one
+                        int newIndex = kvp.Value > index ? kvp.Value - 1 : kvp.Value;
+                        updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, newIndex));
+                    }
+
+                    // Write all updated indices at once
+                    SaveIndexMap(updatedIndices);
+                }
+
+                // Delete the file
+                if (File.Exists(actualKey))
+                    File.Delete(actualKey);
+
+                DataRemoved?.Invoke(this, key);
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
         }
 
         /// <summary>
@@ -1315,20 +1523,43 @@
 
             try
             {
+                // Get all files to delete
+                List<string> filesToDelete = new List<string>();
                 foreach (FileInfo file in _DirectoryInfo.GetFiles())
                 {
                     if (!file.Name.Equals(_IndexFile)) // Don't delete the index file, just clear it
                     {
-                        file.Delete();
+                        filesToDelete.Add(file.FullName);
+                    }
+                }
+
+                // Delete all files
+                foreach (string file in filesToDelete)
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch (Exception ex)
+                    {
+                        ExceptionEncountered?.Invoke(this, ex);
                     }
                 }
 
                 // Clear index file
                 File.WriteAllText(GetKey(_IndexFile), string.Empty);
 
+                // Remove subdirectories if any
                 foreach (DirectoryInfo dir in _DirectoryInfo.GetDirectories())
                 {
-                    dir.Delete(true);
+                    try
+                    {
+                        dir.Delete(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        ExceptionEncountered?.Invoke(this, ex);
+                    }
                 }
             }
             finally
@@ -1359,8 +1590,18 @@
             await _Semaphore.WaitAsync(token);
             try
             {
-                Dictionary<string, int> indexMap = GetIndexMap();
-                return indexMap.OrderByDescending(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+                token.ThrowIfCancellationRequested();
+
+                lock (_IndexFileLock)
+                {
+                    Dictionary<string, int> indexMap = GetIndexMap();
+                    return indexMap.OrderByDescending(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                ExceptionEncountered?.Invoke(this, ex);
+                throw;
             }
             finally
             {
@@ -1398,11 +1639,25 @@
 
         private string[] GetKeysInStackOrder()
         {
-            return _DirectoryInfo.GetFiles()
-                .Where(f => !f.Name.Equals(_IndexFile))
-                .OrderByDescending(f => f.LastWriteTime)
-                .Select(f => f.Name)
-                .ToArray();
+            try
+            {
+                lock (_IndexFileLock)
+                {
+                    Dictionary<string, int> indexMap = GetIndexMap();
+                    return indexMap.OrderBy(kvp => kvp.Value)
+                        .Select(kvp => kvp.Key)
+                        .ToArray();
+                }
+            }
+            catch (Exception)
+            {
+                // Fallback to file timestamp ordering if index is corrupted
+                return _DirectoryInfo.GetFiles()
+                    .Where(f => !f.Name.Equals(_IndexFile))
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .Select(f => f.Name)
+                    .ToArray();
+            }
         }
 
         private int GetFileSize(string str)
@@ -1425,16 +1680,26 @@
             if (!File.Exists(filename))
                 File.WriteAllBytes(filename, Array.Empty<byte>());
 
-            string[] lines = File.ReadAllLines(filename);
-
-            if (lines != null && lines.Length > 0)
+            try
             {
-                for (int i = 0; i < lines.Length; i++)
+                string[] lines = File.ReadAllLines(filename);
+
+                if (lines != null && lines.Length > 0)
                 {
-                    KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
-                    if (line == null) continue;
-                    indexMap[line.Value.Key] = line.Value.Value;
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        if (string.IsNullOrWhiteSpace(lines[i]))
+                            continue;
+
+                        KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
+                        if (line == null) continue;
+                        indexMap[line.Value.Key] = line.Value.Value;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                ExceptionEncountered?.Invoke(this, ex);
             }
 
             return indexMap;
@@ -1561,15 +1826,45 @@
         private void SaveIndexMap(IEnumerable<KeyValuePair<string, int>> indexMap)
         {
             string filename = GetKey(_IndexFile);
-            List<string> lines = new List<string>();
+            string tempFile = filename + ".tmp";
 
-            foreach (var kvp in indexMap)
+            try
             {
-                lines.Add(kvp.Key + " " + kvp.Value.ToString());
-            }
+                // Use StreamWriter for direct control over file writing
+                using (StreamWriter writer = new StreamWriter(tempFile, false, Encoding.UTF8))
+                {
+                    foreach (var kvp in indexMap)
+                    {
+                        if (!string.IsNullOrEmpty(kvp.Key))
+                        {
+                            writer.WriteLine($"{kvp.Key} {kvp.Value}");
+                        }
+                    }
+                    writer.Flush();
+                }
 
-            // This should only be called when already holding the _IndexFileLock
-            File.WriteAllLines(filename, lines);
+                // Use atomic file replacement
+                if (File.Exists(filename))
+                    File.Delete(filename);
+
+                File.Move(tempFile, filename);
+            }
+            catch (Exception ex)
+            {
+                ExceptionEncountered?.Invoke(this, ex);
+
+                // Fallback to direct write if the atomic approach fails
+                List<string> lines = new List<string>();
+                foreach (var kvp in indexMap)
+                {
+                    if (!string.IsNullOrEmpty(kvp.Key))
+                    {
+                        lines.Add($"{kvp.Key} {kvp.Value}");
+                    }
+                }
+
+                File.WriteAllLines(filename, lines);
+            }
         }
 
         #endregion

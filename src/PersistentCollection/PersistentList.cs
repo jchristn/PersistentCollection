@@ -244,14 +244,24 @@ namespace PersistentCollection
         {
             if (String.IsNullOrEmpty(directory)) throw new ArgumentNullException(nameof(directory));
 
-            _Directory = directory;
+            // Normalize directory path
+            _Directory = directory.Replace("\\", "/");
+            if (!_Directory.EndsWith("/")) _Directory += "/";
 
-            InitializeDirectory();
+            // Create directory if it doesn't exist
+            if (!Directory.Exists(_Directory))
+                Directory.CreateDirectory(_Directory);
 
+            _DirectoryInfo = new DirectoryInfo(_Directory);
             _ClearOnDispose = clearOnDispose;
 
-            if (!File.Exists(GetKey(_IndexFile)))
-                File.WriteAllBytes(GetKey(_IndexFile), Array.Empty<byte>());
+            // Ensure the index file exists
+            string indexPath = GetKey(_IndexFile);
+            if (!File.Exists(indexPath))
+            {
+                // Create empty index file
+                File.WriteAllBytes(indexPath, Array.Empty<byte>());
+            }
 
             _JsonOptions = new JsonSerializerOptions
             {
@@ -289,26 +299,44 @@ namespace PersistentCollection
             if (index < 0 || index > Count)
                 throw new ArgumentOutOfRangeException(nameof(index));
 
-            // Need to shift all items after the insertion point
-            List<T> items = new List<T>();
-            for (int i = index; i < Count; i++)
+            _Semaphore.Wait();
+            try
             {
-                items.Add(this[i]);
+                // Create a new key for the item
+                string newKey = Guid.NewGuid().ToString();
+                byte[] serialized = SerializeItem(item);
+
+                // Save the serialized item
+                using (FileStream fs = new FileStream(GetKey(newKey), FileMode.OpenOrCreate, FileAccess.Write))
+                {
+                    fs.Write(serialized, 0, serialized.Length);
+                }
+
+                // Get current indices from the file
+                Dictionary<string, int> indexMap = GetIndexMap();
+                List<KeyValuePair<string, int>> orderedIndices = indexMap
+                    .OrderBy(kvp => kvp.Value)
+                    .ToList();
+
+                // Shift indices for items at or after the insertion point
+                List<string> updatedLines = new List<string>();
+                foreach (var kvp in orderedIndices)
+                {
+                    int newIndex = kvp.Value >= index ? kvp.Value + 1 : kvp.Value;
+                    updatedLines.Add(kvp.Key + " " + newIndex.ToString());
+                }
+
+                // Add the new item at the specified index
+                updatedLines.Add(newKey + " " + index.ToString());
+
+                // Write all indices back to file
+                File.WriteAllLines(GetKey(_IndexFile), updatedLines);
+
+                DataAdded?.Invoke(this, newKey);
             }
-
-            // Remove all items from index to end
-            for (int i = Count - 1; i >= index; i--)
+            finally
             {
-                RemoveAt(i);
-            }
-
-            // Insert the new item
-            Add(item);
-
-            // Add back the shifted items
-            foreach (var shiftedItem in items)
-            {
-                Add(shiftedItem);
+                _Semaphore.Release();
             }
         }
 
@@ -489,17 +517,102 @@ namespace PersistentCollection
 
             string key = Guid.NewGuid().ToString();
 
-            await _Semaphore.WaitAsync();
+            await _Semaphore.WaitAsync(token);
 
             try
             {
+                token.ThrowIfCancellationRequested();
+
+                // Write the data first
                 using (FileStream fs = new FileStream(GetKey(key), FileMode.OpenOrCreate, FileAccess.Write))
                 {
                     await fs.WriteAsync(data, 0, data.Length, token).ConfigureAwait(false);
                 }
 
+                // Then update the index
                 int index = GetLastIndex() + 1;
                 AddToIndex(key, index);
+            }
+            catch (OperationCanceledException)
+            {
+                // Cleanup if cancelled after starting the file write
+                try
+                {
+                    string actualKey = GetKey(key);
+                    if (File.Exists(actualKey))
+                    {
+                        File.Delete(actualKey);
+                    }
+
+                    // Remove from index by using a direct update to the index file
+                    // (instead of calling non-existent RemoveFromIndex)
+                    lock (_IndexFileLock)
+                    {
+                        string filename = GetKey(_IndexFile);
+                        List<string> updatedLines = new List<string>();
+
+                        if (File.Exists(filename))
+                        {
+                            string[] lines = File.ReadAllLines(filename);
+                            foreach (string line in lines)
+                            {
+                                string[] parts = line.Split(new char[] { ' ' }, 2);
+                                if (parts.Length == 2 && !parts[0].Equals(key))
+                                {
+                                    updatedLines.Add(line);
+                                }
+                            }
+
+                            File.WriteAllLines(filename, updatedLines);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+                throw; // Re-throw the cancellation exception
+            }
+            catch (Exception ex)
+            {
+                // Cleanup on other exceptions
+                try
+                {
+                    string actualKey = GetKey(key);
+                    if (File.Exists(actualKey))
+                    {
+                        File.Delete(actualKey);
+                    }
+
+                    // Also remove from index if it was added
+                    lock (_IndexFileLock)
+                    {
+                        string filename = GetKey(_IndexFile);
+                        List<string> updatedLines = new List<string>();
+
+                        if (File.Exists(filename))
+                        {
+                            string[] lines = File.ReadAllLines(filename);
+                            foreach (string line in lines)
+                            {
+                                string[] parts = line.Split(new char[] { ' ' }, 2);
+                                if (parts.Length == 2 && !parts[0].Equals(key))
+                                {
+                                    updatedLines.Add(line);
+                                }
+                            }
+
+                            File.WriteAllLines(filename, updatedLines);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+
+                ExceptionEncountered?.Invoke(this, ex);
+                throw;
             }
             finally
             {
@@ -591,10 +704,12 @@ namespace PersistentCollection
 
             if (!KeyExists(key)) throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
 
-            await _Semaphore.WaitAsync();
+            await _Semaphore.WaitAsync(token);
 
             try
             {
+                token.ThrowIfCancellationRequested();
+
                 string actualKey = GetKey(key);
                 using (FileStream fs = new FileStream(actualKey, FileMode.Truncate, FileAccess.Write))
                 {
@@ -676,9 +791,23 @@ namespace PersistentCollection
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
 
-            string key = GetKeyByIndex(index);
-            if (String.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            // Get the key outside the semaphore
+            string key = null;
 
+            await _Semaphore.WaitAsync(token);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                key = GetKeyByIndex(index);
+                if (String.IsNullOrEmpty(key))
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
+
+            // Then use the key to get the data
             return await GetAsync(key, token).ConfigureAwait(false);
         }
 
@@ -723,16 +852,21 @@ namespace PersistentCollection
         public async Task<byte[]> GetAsync(string key, CancellationToken token = default)
         {
             if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
+
+            // Check if key exists before acquiring the semaphore
             if (!KeyExists(key)) throw new KeyNotFoundException("The specified key '" + key + "' does not exist.");
 
             byte[] ret = null;
             string actualKey = GetKey(key);
             int size = GetFileSize(key);
 
-            await _Semaphore.WaitAsync();
+            await _Semaphore.WaitAsync(token);
 
             try
             {
+                token.ThrowIfCancellationRequested();
+
+                // Read the file
                 using (FileStream fs = new FileStream(actualKey, FileMode.Open, FileAccess.Read))
                 {
                     ret = new byte[size];
@@ -746,6 +880,7 @@ namespace PersistentCollection
 
             return ret;
         }
+
 
         /// <summary>
         /// Get an item from the list by its key.
@@ -778,10 +913,44 @@ namespace PersistentCollection
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
 
-            string key = GetKeyByIndex(index);
-            if (String.IsNullOrEmpty(key)) throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
+            _Semaphore.Wait();
+            try
+            {
+                string key = GetKeyByIndex(index);
+                if (String.IsNullOrEmpty(key))
+                    throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range.");
 
-            Remove(key);
+                string actualKey = GetKey(key);
+
+                // Get the current index map
+                Dictionary<string, int> indexMap = GetIndexMap();
+
+                // Remove the file
+                if (File.Exists(actualKey))
+                {
+                    File.Delete(actualKey);
+                }
+
+                // Update all indices
+                List<string> updatedLines = new List<string>();
+                foreach (var kvp in indexMap)
+                {
+                    if (kvp.Key.Equals(key)) continue; // Skip the removed key
+
+                    // Decrement the index for all items that come after the removed item
+                    int newIndex = kvp.Value > index ? kvp.Value - 1 : kvp.Value;
+                    updatedLines.Add(kvp.Key + " " + newIndex.ToString());
+                }
+
+                // Write updated indices back to the file atomically
+                File.WriteAllLines(GetKey(_IndexFile), updatedLines);
+
+                DataRemoved?.Invoke(this, key);
+            }
+            finally
+            {
+                _Semaphore.Release();
+            }
         }
 
         /// <summary>
@@ -792,44 +961,46 @@ namespace PersistentCollection
         {
             if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
 
-            string actualKey = GetKey(key);
-            int removedIndex = -1;
-
             _Semaphore.Wait();
-
             try
             {
-                // Get the index of the key we're removing
+                string actualKey = GetKey(key);
+
+                // Get the index map to find the index of the key
                 Dictionary<string, int> indexMap = GetIndexMap();
-                if (indexMap.TryGetValue(key, out removedIndex))
+
+                if (!indexMap.TryGetValue(key, out int removedIndex))
                 {
-                    // Remove the file
-                    if (File.Exists(actualKey))
-                    {
-                        File.Delete(actualKey);
-                    }
-
-                    // Update all indexes
-                    List<string> updatedLines = new List<string>();
-                    foreach (var kvp in indexMap)
-                    {
-                        if (kvp.Key.Equals(key)) continue; // Skip the removed key
-
-                        // Decrement the index for all items that come after the removed item
-                        int newIndex = kvp.Value > removedIndex ? kvp.Value - 1 : kvp.Value;
-                        updatedLines.Add(kvp.Key + " " + newIndex.ToString());
-                    }
-
-                    // Write updated indexes back to the file
-                    File.WriteAllLines(GetKey(_IndexFile), updatedLines);
+                    // Key doesn't exist in the index, nothing to remove
+                    return;
                 }
+
+                // Remove the file
+                if (File.Exists(actualKey))
+                {
+                    File.Delete(actualKey);
+                }
+
+                // Update all indices
+                List<string> updatedLines = new List<string>();
+                foreach (var kvp in indexMap)
+                {
+                    if (kvp.Key.Equals(key)) continue; // Skip the removed key
+
+                    // Decrement the index for all items that come after the removed item
+                    int newIndex = kvp.Value > removedIndex ? kvp.Value - 1 : kvp.Value;
+                    updatedLines.Add(kvp.Key + " " + newIndex.ToString());
+                }
+
+                // Write updated indices back to the file atomically
+                File.WriteAllLines(GetKey(_IndexFile), updatedLines);
+
+                DataRemoved?.Invoke(this, key);
             }
             finally
             {
                 _Semaphore.Release();
             }
-
-            DataRemoved?.Invoke(this, key);
         }
 
         /// <summary>
@@ -853,6 +1024,8 @@ namespace PersistentCollection
 
             try
             {
+                token.ThrowIfCancellationRequested();
+
                 Dictionary<string, int> indexMap = GetIndexMap();
                 return indexMap.OrderBy(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
             }
@@ -887,10 +1060,16 @@ namespace PersistentCollection
             if (collection == null)
                 throw new ArgumentNullException(nameof(collection));
 
-            foreach (var item in collection)
+            // Convert collection to a list to avoid multiple enumerations
+            List<T> items = new List<T>(collection);
+            if (items.Count == 0)
+                return; // Nothing to do
+
+            // Add items one by one to avoid complex locking that might lead to deadlocks
+            foreach (var item in items)
             {
+                token.ThrowIfCancellationRequested();
                 await AddAsync(item, token).ConfigureAwait(false);
-                if (token.IsCancellationRequested) break;
             }
         }
 
@@ -1328,30 +1507,58 @@ namespace PersistentCollection
                 throw new ArgumentNullException(nameof(collection));
 
             List<T> itemsToInsert = new List<T>(collection);
+            if (itemsToInsert.Count == 0)
+                return; // Nothing to insert
 
-            // Need to shift all items after the insertion point
-            List<T> itemsToShift = new List<T>();
-            for (int i = index; i < Count; i++)
+            _Semaphore.Wait();
+            try
             {
-                itemsToShift.Add(this[i]);
+                // Get all existing keys and indices
+                Dictionary<string, int> indexMap = GetIndexMap();
+                List<KeyValuePair<string, int>> orderedIndices = indexMap
+                    .OrderBy(kvp => kvp.Value)
+                    .ToList();
+
+                // Create new keys and save all items to insert
+                List<string> newKeys = new List<string>();
+                foreach (var item in itemsToInsert)
+                {
+                    string newKey = Guid.NewGuid().ToString();
+                    newKeys.Add(newKey);
+
+                    byte[] serialized = SerializeItem(item);
+                    using (FileStream fs = new FileStream(GetKey(newKey), FileMode.OpenOrCreate, FileAccess.Write))
+                    {
+                        fs.Write(serialized, 0, serialized.Length);
+                    }
+                }
+
+                // Update indices for all existing items
+                List<string> updatedLines = new List<string>();
+                foreach (var kvp in orderedIndices)
+                {
+                    int newIndex = kvp.Value >= index ? kvp.Value + itemsToInsert.Count : kvp.Value;
+                    updatedLines.Add(kvp.Key + " " + newIndex.ToString());
+                }
+
+                // Add indices for all new items
+                for (int i = 0; i < newKeys.Count; i++)
+                {
+                    updatedLines.Add(newKeys[i] + " " + (index + i).ToString());
+                }
+
+                // Write all indices back to file
+                File.WriteAllLines(GetKey(_IndexFile), updatedLines);
+
+                // Raise events for all added items
+                foreach (var newKey in newKeys)
+                {
+                    DataAdded?.Invoke(this, newKey);
+                }
             }
-
-            // Remove all items from index to end
-            for (int i = Count - 1; i >= index; i--)
+            finally
             {
-                RemoveAt(i);
-            }
-
-            // Insert the new items
-            foreach (var item in itemsToInsert)
-            {
-                Add(item);
-            }
-
-            // Add back the shifted items
-            foreach (var item in itemsToShift)
-            {
-                Add(item);
+                _Semaphore.Release();
             }
         }
 
@@ -1418,17 +1625,26 @@ namespace PersistentCollection
 
             try
             {
+                // First get all files to delete
+                List<string> filesToDelete = new List<string>();
                 foreach (FileInfo file in _DirectoryInfo.GetFiles())
                 {
                     if (!file.Name.Equals(_IndexFile)) // Don't delete the index file, just clear it
                     {
-                        file.Delete();
+                        filesToDelete.Add(file.FullName);
                     }
+                }
+
+                // Delete all data files
+                foreach (string file in filesToDelete)
+                {
+                    File.Delete(file);
                 }
 
                 // Clear index file
                 File.WriteAllText(GetKey(_IndexFile), string.Empty);
 
+                // Remove subdirectories if any
                 foreach (DirectoryInfo dir in _DirectoryInfo.GetDirectories())
                 {
                     dir.Delete(true);
@@ -1501,6 +1717,8 @@ namespace PersistentCollection
                 {
                     for (int i = 0; i < lines.Length; i++)
                     {
+                        if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
                         KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
                         if (line == null) continue;
                         indexMap[line.Value.Key] = line.Value.Value;
@@ -1509,6 +1727,81 @@ namespace PersistentCollection
             }
 
             return indexMap;
+        }
+
+        private async Task<Dictionary<string, int>> GetIndexMapAsync(CancellationToken token = default)
+        {
+            Dictionary<string, int> indexMap = new Dictionary<string, int>();
+            string filename = GetKey(_IndexFile);
+
+            token.ThrowIfCancellationRequested();
+
+            if (!File.Exists(filename))
+                File.WriteAllBytes(filename, Array.Empty<byte>());
+
+            // Read file asynchronously using FileStream instead of File.ReadAllLinesAsync
+            List<string> lines = new List<string>();
+            using (FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read))
+            using (StreamReader reader = new StreamReader(fs, Encoding.UTF8))
+            {
+                string line;
+                while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
+                {
+                    lines.Add(line);
+                }
+            }
+
+            if (lines.Count > 0)
+            {
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
+                    KeyValuePair<string, int>? parsedLine = ParseIndexLine(i, lines[i]);
+                    if (parsedLine == null) continue;
+                    indexMap[parsedLine.Value.Key] = parsedLine.Value.Value;
+                }
+            }
+
+            return indexMap;
+        }
+
+        private async Task SaveIndexMapAsync(List<KeyValuePair<string, int>> indexEntries, CancellationToken token = default)
+        {
+            string filename = GetKey(_IndexFile);
+            List<string> lines = new List<string>();
+
+            foreach (var kvp in indexEntries)
+            {
+                if (!string.IsNullOrEmpty(kvp.Key))
+                {
+                    lines.Add(kvp.Key + " " + kvp.Value.ToString());
+                }
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            try
+            {
+                // Use atomic file operation to prevent corruption
+                string tempFile = filename + ".tmp";
+                await WriteAllLinesAsync(tempFile, lines, token);
+
+                if (File.Exists(filename))
+                    File.Delete(filename);
+
+                File.Move(tempFile, filename);
+            }
+            catch (Exception ex)
+            {
+                if (ex is OperationCanceledException)
+                    throw;
+
+                ExceptionEncountered?.Invoke(this, ex);
+
+                // Fallback to direct write if the atomic approach fails
+                await WriteAllLinesAsync(filename, lines, token);
+            }
         }
 
         private int GetLastIndex()
@@ -1546,6 +1839,40 @@ namespace PersistentCollection
                 updatedLines.Add(key + " " + index.ToString());
                 File.WriteAllLines(filename, updatedLines);
             }
+        }
+
+        private async Task WriteAllLinesAsync(string path, IEnumerable<string> lines, CancellationToken token = default)
+        {
+            using (FileStream fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None,
+                                               bufferSize: 4096, useAsync: true))
+            using (StreamWriter writer = new StreamWriter(fs, Encoding.UTF8))
+            {
+                foreach (string line in lines)
+                {
+                    token.ThrowIfCancellationRequested();
+                    await writer.WriteLineAsync(line).ConfigureAwait(false);
+                }
+                await writer.FlushAsync().ConfigureAwait(false);
+            }
+        }
+
+        private async Task<string[]> ReadAllLinesAsync(string path, CancellationToken token = default)
+        {
+            List<string> lines = new List<string>();
+
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                                               bufferSize: 4096, useAsync: true))
+            using (StreamReader reader = new StreamReader(fs, Encoding.UTF8))
+            {
+                string line;
+                while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
+                {
+                    token.ThrowIfCancellationRequested();
+                    lines.Add(line);
+                }
+            }
+
+            return lines.ToArray();
         }
 
         private string GetKeyByIndex(int index)

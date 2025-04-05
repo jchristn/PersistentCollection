@@ -29,28 +29,14 @@
             Console.WriteLine($"Test directory: {_testDirectory}");
             Console.WriteLine("-----------------------------------------");
 
-            // Ensure clean test directory
             CleanTestDirectory();
-
-            // Run basic functionality tests
             await RunBasicTests();
-
-            // Run queue implementation tests
             await RunQueueTests();
-
-            // Run event handler tests
             await RunEventTests();
-
-            // Run exception handling tests
             await RunExceptionTests();
-
-            // Run asynchronous API tests
             await RunAsyncTests();
-
-            // Run concurrent access tests
             await RunConcurrentTests();
-
-            // Run combined tests with complex scenarios
+            await RunConcurrentOrderTests();
             await RunComplexScenarioTests();
 
             // Summary
@@ -707,9 +693,19 @@
                 using var queue = new PersistentQueue<string>(queueDir);
 
                 // Try to dequeue from empty queue
-                // Note: PersistentQueue returns default(T) for empty queue rather than throwing
-                var result = queue.Dequeue();
-                AssertEquals(default(string), result, "Dequeue on empty queue should return default(T)");
+                try
+                {
+                    var result = queue.Dequeue();
+                    AssertTrue(false, "Should throw InvalidOperationException for empty queue");
+                }
+                catch (InvalidOperationException)
+                {
+                    AssertTrue(true, "Correctly threw InvalidOperationException for empty queue");
+                }
+                catch (Exception ex)
+                {
+                    AssertTrue(false, $"Threw wrong exception type: {ex.GetType().Name}");
+                }
             }
         }
 
@@ -1081,6 +1077,506 @@
 
                 AssertTrue(queue.Count > 0, "Queue should have items remaining after concurrent operations");
                 AssertTrue(queue.Count < 100, "Queue should have had some items dequeued");
+            }
+        }
+
+        private static async Task RunConcurrentOrderTests()
+        {
+            Console.WriteLine("\nRunning Concurrent Order Preservation Tests...");
+
+            // Test 1: Order preservation with concurrent enqueues
+            {
+                var queueDir = Path.Combine(_testDirectory, "concurrent_order_enqueue");
+                using var queue = new PersistentQueue<int>(queueDir);
+
+                // Create multiple concurrent enqueue tasks that add items in sequence from each thread
+                var tasks = new List<Task<List<string>>>();
+                int threadCount = 4;
+                int itemsPerThread = 25;
+
+                // Track keys in order for verification
+                var allKeysInOrder = new List<string>[threadCount];
+
+                for (int i = 0; i < threadCount; i++)
+                {
+                    int threadId = i;
+                    tasks.Add(Task.Run(() =>
+                    {
+                        var keysAdded = new List<string>();
+                        for (int j = 0; j < itemsPerThread; j++)
+                        {
+                            // Each thread enqueues values in its own range
+                            // Thread 0: 0-24, Thread 1: 100-124, etc.
+                            int value = threadId * 100 + j;
+                            string key = queue.Enqueue(value);
+                            keysAdded.Add(key);
+                            // Small delay to increase chance of thread interleaving
+                            Thread.Sleep(1);
+                        }
+                        return keysAdded;
+                    }));
+                }
+
+                // Wait for all tasks and collect added keys
+                var results = await Task.WhenAll(tasks);
+                for (int i = 0; i < threadCount; i++)
+                {
+                    allKeysInOrder[i] = results[i];
+                }
+
+                // Verify total count
+                AssertEquals(threadCount * itemsPerThread, queue.Count,
+                    "All items from all threads should be added");
+
+                // For each thread, verify that its items maintain their relative order in the queue
+                for (int t = 0; t < threadCount; t++)
+                {
+                    var keysFromThread = allKeysInOrder[t];
+
+                    // Verify that when we iterate through the queue, the items from this thread
+                    // appear in the same relative order they were added
+                    var itemsFromThread = new List<int>();
+                    foreach (var item in queue)
+                    {
+                        if (item >= t * 100 && item < (t + 1) * 100)
+                        {
+                            itemsFromThread.Add(item);
+                        }
+                    }
+
+                    // Verify values are in sequential order within each thread's range
+                    bool inOrder = true;
+                    for (int i = 0; i < itemsFromThread.Count - 1; i++)
+                    {
+                        if (itemsFromThread[i] + 1 != itemsFromThread[i + 1])
+                        {
+                            inOrder = false;
+                            break;
+                        }
+                    }
+
+                    AssertTrue(inOrder, $"Items enqueued by thread {t} should maintain their relative order");
+                }
+            }
+
+            // Test 2: Order preservation with interleaved enqueues and dequeues
+            {
+                var queueDir = Path.Combine(_testDirectory, "concurrent_enqueue_dequeue_order");
+                using var queue = new PersistentQueue<int>(queueDir);
+
+                Console.WriteLine("===== DEBUG INFO START =====");
+
+                // Start with a clean queue
+                queue.Clear();
+                Console.WriteLine($"After clear: Queue count = {queue.Count}");
+
+                // Record actual numbers of items added and removed
+                int actualItemsAdded = 0;
+
+                // First enqueue a set of ordered items
+                for (int i = 0; i < 50; i++)
+                {
+                    queue.Enqueue(i);
+                    actualItemsAdded++;
+                }
+
+                Console.WriteLine($"After initial enqueue: Queue count = {queue.Count}, Items added = {actualItemsAdded}");
+
+                // Use a counter to track enqueued items
+                int enqueuedCount = 0;
+
+                // Create a task that enqueues items
+                var enqueueTask = Task.Run(() =>
+                {
+                    for (int i = 0; i < 20; i++)
+                    {
+                        try
+                        {
+                            queue.Enqueue(1000 + i);
+                            Interlocked.Increment(ref enqueuedCount);
+                            Thread.Sleep(5); // Small delay
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Enqueue error: {ex.Message}");
+                        }
+                    }
+                    Console.WriteLine($"Enqueue task finished. Items added: {enqueuedCount}");
+                });
+
+                // Create a task that dequeues EXACTLY 15 items
+                var dequeueTask = Task.Run(() =>
+                {
+                    List<int> dequeuedItems = new List<int>();
+                    int attemptsLeft = 15; // We want exactly 15 items
+
+                    Console.WriteLine("Starting dequeue task");
+
+                    while (attemptsLeft > 0)
+                    {
+                        try
+                        {
+                            int item = queue.Dequeue();
+                            dequeuedItems.Add(item);
+                            attemptsLeft--;
+
+                            Console.WriteLine($"Successfully dequeued item: {item}. Remaining attempts: {attemptsLeft}");
+                            Thread.Sleep(7); // Small delay
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            Console.WriteLine("Queue empty, waiting to retry...");
+                            Thread.Sleep(10);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Dequeue error: {ex.Message}");
+                            Thread.Sleep(10);
+                        }
+                    }
+
+                    Console.WriteLine($"Dequeue task finished. Items removed: {dequeuedItems.Count}");
+                    return dequeuedItems;
+                });
+
+                // Wait for tasks to complete
+                await Task.WhenAll(enqueueTask, dequeueTask);
+                var dequeuedItems = await dequeueTask;
+
+                // Calculate the expected final count
+                actualItemsAdded += enqueuedCount;
+                int expectedFinalCount = actualItemsAdded - dequeuedItems.Count;
+
+                // Check directory files vs queue count
+                int fileCount = Directory.GetFiles(queueDir)
+                    .Where(f => !Path.GetFileName(f).Equals(".index"))
+                    .Count();
+
+                Console.WriteLine($"Final values:");
+                Console.WriteLine($"  - Initial items: 50");
+                Console.WriteLine($"  - Total items added: {actualItemsAdded}");
+                Console.WriteLine($"  - Items dequeued: {dequeuedItems.Count}");
+                Console.WriteLine($"  - Expected queue count: {expectedFinalCount}");
+                Console.WriteLine($"  - Actual queue count: {queue.Count}");
+                Console.WriteLine($"  - File count in directory: {fileCount}");
+
+                // Check the index vs files
+                var indexEntries = new List<string>();
+                try
+                {
+                    string indexPath = Path.Combine(queueDir, ".index");
+                    if (File.Exists(indexPath))
+                    {
+                        indexEntries = File.ReadAllLines(indexPath).ToList();
+                        Console.WriteLine($"  - Index entries: {indexEntries.Count}");
+                        Console.WriteLine($"  - Index content: {string.Join(", ", indexEntries.Take(10))}...");
+                    }
+                    else
+                    {
+                        Console.WriteLine("  - Index file doesn't exist!");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  - Error reading index: {ex.Message}");
+                }
+
+                // Check if files in directory match index entries
+                var fileNames = Directory.GetFiles(queueDir)
+                    .Where(f => !Path.GetFileName(f).Equals(".index"))
+                    .Select(f => Path.GetFileName(f))
+                    .ToList();
+
+                int matchingEntries = 0;
+                foreach (var entry in indexEntries)
+                {
+                    var parts = entry.Split(' ');
+                    if (parts.Length >= 1 && fileNames.Contains(parts[0]))
+                    {
+                        matchingEntries++;
+                    }
+                }
+
+                Console.WriteLine($"  - Files matching index entries: {matchingEntries}/{indexEntries.Count}");
+
+                // Try to capture file content for debugging
+                try
+                {
+                    var sampleFiles = Directory.GetFiles(queueDir)
+                        .Where(f => !Path.GetFileName(f).Equals(".index"))
+                        .Take(3);
+
+                    Console.WriteLine("  - Sample file contents:");
+                    foreach (var file in sampleFiles)
+                    {
+                        try
+                        {
+                            byte[] bytes = File.ReadAllBytes(file);
+                            Console.WriteLine($"    - {Path.GetFileName(file)}: {bytes.Length} bytes");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"    - Error reading {Path.GetFileName(file)}: {ex.Message}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  - Error examining files: {ex.Message}");
+                }
+
+                Console.WriteLine("===== DEBUG INFO END =====");
+
+                // Verify we dequeued exactly 15 items
+                AssertEquals(15, dequeuedItems.Count, "Dequeue task should remove exactly 15 items");
+
+                // Now we can check the total accounting
+                AssertEquals(expectedFinalCount, queue.Count,
+                    "Queue should account for all items (50 original + 20 enqueued - 15 dequeued)");
+            }
+
+            // Test 3: Order preservation with multiple threads performing mixed operations
+            {
+                var queueDir = Path.Combine(_testDirectory, "concurrent_mixed_operations_order");
+                using var queue = new PersistentQueue<string>(queueDir);
+
+                // Make sure directory is clean
+                queue.Clear();
+
+                // Enqueue initial items (A0-A49)
+                for (int i = 0; i < 50; i++)
+                {
+                    queue.Enqueue($"A{i}");
+                }
+
+                // Use a CountdownEvent to ensure all operations complete
+                var operationsCompleted = new CountdownEvent(3);
+
+                // Track enqueued items for verification
+                var enqueuedBItems = new List<string>();
+                var enqueuedCItems = new List<string>();
+                var dequeuedItems = new List<string>();
+
+                // Tasks will perform different operations concurrently
+                var tasks = new List<Task>();
+
+                // Task 1: Enqueue B items
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        for (int i = 0; i < 10; i++)
+                        {
+                            string item = $"B{i}";
+                            queue.Enqueue(item);
+                            lock (enqueuedBItems)
+                            {
+                                enqueuedBItems.Add(item);
+                            }
+                            Console.WriteLine($"Enqueued {item}");
+                            Thread.Sleep(3);
+                        }
+                    }
+                    finally
+                    {
+                        operationsCompleted.Signal();
+                    }
+                }));
+
+                // Task 2: Enqueue C items
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        for (int i = 0; i < 10; i++)
+                        {
+                            string item = $"C{i}";
+                            queue.Enqueue(item);
+                            lock (enqueuedCItems)
+                            {
+                                enqueuedCItems.Add(item);
+                            }
+                            Console.WriteLine($"Enqueued {item}");
+                            Thread.Sleep(4);
+                        }
+                    }
+                    finally
+                    {
+                        operationsCompleted.Signal();
+                    }
+                }));
+
+                // Task 3: Dequeue exactly 5 items
+                tasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        // Wait a short moment to ensure some items are enqueued first
+                        Thread.Sleep(10);
+
+                        for (int i = 0; i < 5; i++)
+                        {
+                            if (queue.Count > 0)
+                            {
+                                string dequeued = queue.Dequeue();
+                                lock (dequeuedItems)
+                                {
+                                    dequeuedItems.Add(dequeued);
+                                }
+                                Console.WriteLine($"Dequeued {dequeued}");
+                                Thread.Sleep(5);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        operationsCompleted.Signal();
+                    }
+                }));
+
+                // Wait for all tasks to complete
+                operationsCompleted.Wait();
+
+                // Get all remaining items in order
+                List<string> remainingItems = queue.ToArray().ToList();
+
+                // Count by category
+                int remainingBCount = remainingItems.Count(item => item.StartsWith("B"));
+                int remainingCCount = remainingItems.Count(item => item.StartsWith("C"));
+                int remainingACount = remainingItems.Count(item => item.StartsWith("A"));
+                int otherCount = remainingItems.Count(item => !item.StartsWith("A") && !item.StartsWith("B") && !item.StartsWith("C"));
+
+                // Calculate dequeued counts
+                int dequeuedBCount = dequeuedItems.Count(item => item.StartsWith("B"));
+                int dequeuedCCount = dequeuedItems.Count(item => item.StartsWith("C"));
+                int dequeuedACount = dequeuedItems.Count(item => item.StartsWith("A"));
+
+                // Get the remaining items by category
+                List<string> remainingAItems = remainingItems.Where(item => item.StartsWith("A")).ToList();
+                List<string> remainingBItems = remainingItems.Where(item => item.StartsWith("B")).ToList();
+                List<string> remainingCItems = remainingItems.Where(item => item.StartsWith("C")).ToList();
+
+                // Print detailed diagnostic information
+                Console.WriteLine("Enqueued B items in order:");
+                foreach (var item in enqueuedBItems)
+                {
+                    Console.WriteLine($"  {item}");
+                }
+
+                Console.WriteLine("Remaining B items in order they appear in the queue:");
+                foreach (var item in remainingBItems)
+                {
+                    Console.WriteLine($"  {item}");
+                }
+
+                Console.WriteLine("Dequeued items during test:");
+                foreach (var item in dequeuedItems)
+                {
+                    Console.WriteLine($"  {item}");
+                }
+
+                // In a FIFO queue, the items should be in increasing order of index
+                // IMPORTANT: Check for B items (should be in order of index)
+                bool bItemsInFIFO = true;
+                for (int i = 0; i < remainingBItems.Count - 1; i++)
+                {
+                    // Extract the indexes from the item names (e.g., "B5" -> 5)
+                    int currentIndex = int.Parse(remainingBItems[i].Substring(1));
+                    int nextIndex = int.Parse(remainingBItems[i + 1].Substring(1));
+
+                    // In FIFO order, items with lower indices should be dequeued first
+                    if (currentIndex > nextIndex)
+                    {
+                        bItemsInFIFO = false;
+                        Console.WriteLine($"FIFO violation: {remainingBItems[i]} before {remainingBItems[i + 1]}");
+                        break;
+                    }
+                }
+
+                // Same check for C items
+                bool cItemsInFIFO = true;
+                for (int i = 0; i < remainingCItems.Count - 1; i++)
+                {
+                    int currentIndex = int.Parse(remainingCItems[i].Substring(1));
+                    int nextIndex = int.Parse(remainingCItems[i + 1].Substring(1));
+
+                    if (currentIndex > nextIndex)
+                    {
+                        cItemsInFIFO = false;
+                        Console.WriteLine($"FIFO violation: {remainingCItems[i]} before {remainingCItems[i + 1]}");
+                        break;
+                    }
+                }
+
+                // A items should be in order (A0 first, then A1, etc.)
+                bool aItemsInFIFO = true;
+                for (int i = 0; i < remainingAItems.Count - 1; i++)
+                {
+                    int currentIndex = int.Parse(remainingAItems[i].Substring(1));
+                    int nextIndex = int.Parse(remainingAItems[i + 1].Substring(1));
+
+                    if (currentIndex > nextIndex)
+                    {
+                        aItemsInFIFO = false;
+                        Console.WriteLine($"FIFO violation for A items: {remainingAItems[i]} before {remainingAItems[i + 1]}");
+                        break;
+                    }
+                }
+
+                // Print detailed summary
+                Console.WriteLine($"Total items at end: {remainingItems.Count}");
+                Console.WriteLine($"Items dequeued during test: {dequeuedItems.Count}");
+                Console.WriteLine($"Enqueued B items: {enqueuedBItems.Count}, Remaining: {remainingBCount}, Dequeued: {dequeuedBCount}");
+                Console.WriteLine($"Enqueued C items: {enqueuedCItems.Count}, Remaining: {remainingCCount}, Dequeued: {dequeuedCCount}");
+                Console.WriteLine($"Original A items: 50, Remaining: {remainingACount}, Dequeued: {dequeuedACount}");
+
+                // Verify that all items are accounted for
+                AssertEquals(enqueuedBItems.Count, remainingBCount + dequeuedBCount, "All B items should be accounted for");
+                AssertEquals(enqueuedCItems.Count, remainingCCount + dequeuedCCount, "All C items should be accounted for");
+                AssertEquals(50, remainingACount + dequeuedACount, "All A items should be accounted for");
+
+                // Verify FIFO ordering within each category
+                AssertTrue(bItemsInFIFO, "B items should maintain FIFO order within their category");
+                AssertTrue(cItemsInFIFO, "C items should maintain FIFO order within their category");
+                AssertTrue(aItemsInFIFO, "A items should maintain FIFO order within their category");
+
+                // Verify no unexpected items
+                AssertEquals(0, otherCount, "No unexpected items should be in the queue");
+
+                // Verify total count
+                int expectedTotalItems = enqueuedBItems.Count + enqueuedCItems.Count + 50 - dequeuedItems.Count;
+                AssertEquals(expectedTotalItems, remainingItems.Count, "Queue should have correct total count after all operations");
+
+                // Verify that the first item in the remaining list continues from where the dequeued items left off
+                if (dequeuedItems.Count > 0 && remainingItems.Count > 0)
+                {
+                    // The first remaining A item index should be >= the last dequeued A item index
+                    // This is a bit complex because we don't know exactly which items were dequeued,
+                    // but we can verify that dequeued A items have lower indices than remaining A items
+                    var dequeuedAIndices = dequeuedItems
+                        .Where(item => item.StartsWith("A"))
+                        .Select(item => int.Parse(item.Substring(1)))
+                        .ToList();
+
+                    var remainingAIndices = remainingItems
+                        .Where(item => item.StartsWith("A"))
+                        .Select(item => int.Parse(item.Substring(1)))
+                        .ToList();
+
+                    if (dequeuedAIndices.Count > 0 && remainingAIndices.Count > 0)
+                    {
+                        int maxDequeuedAIndex = dequeuedAIndices.Max();
+                        int minRemainingAIndex = remainingAIndices.Min();
+
+                        AssertTrue(maxDequeuedAIndex < minRemainingAIndex,
+                            "All dequeued A items should have lower indices than remaining A items");
+                    }
+                }
+
+                // Make sure the queue still works after all these operations
+                string newItem = "TestItem";
+                queue.Enqueue(newItem);
+                AssertEquals(newItem, queue.ToArray().Last(), "Queue should still be operational after tests");
             }
         }
 
