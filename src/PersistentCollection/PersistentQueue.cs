@@ -322,7 +322,7 @@
                 // Get oldest key (smallest index)
                 var indexMap = GetIndexMap();
                 if (indexMap.Count == 0)
-                    return default;
+                    throw new InvalidOperationException("Queue empty");
 
                 var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
                 key = orderedKeys.First().Key;
@@ -428,7 +428,7 @@
                 // Get oldest key (smallest index)
                 var indexMap = GetIndexMap();
                 if (indexMap.Count == 0)
-                    return default;
+                    throw new InvalidOperationException("Queue empty");
 
                 var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
                 key = orderedKeys.First().Key;
@@ -456,6 +456,7 @@
 
             return _Deserializer(data);
         }
+
 
         /// <summary>
         /// Retrieve a specific item from the queue asynchronously.
@@ -538,7 +539,7 @@
                 // Get oldest key (smallest index)
                 var indexMap = GetIndexMap();
                 if (indexMap.Count == 0)
-                    return default;
+                    throw new InvalidOperationException("Queue empty");
 
                 var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
                 key = orderedKeys.First().Key;
@@ -687,7 +688,7 @@
                 // Get oldest key (smallest index)
                 var indexMap = GetIndexMap();
                 if (indexMap.Count == 0)
-                    return default;
+                    throw new InvalidOperationException("Queue empty");
 
                 var orderedKeys = indexMap.OrderBy(kvp => kvp.Value).ToList();
                 key = orderedKeys.First().Key;
