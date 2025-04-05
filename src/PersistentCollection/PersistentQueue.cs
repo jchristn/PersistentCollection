@@ -258,9 +258,8 @@
                     fs.Write(data, 0, data.Length);
                 }
 
-                // Add to index with the next available index
-                int index = GetLastIndex() + 1;
-                AddToIndex(key, index);
+                // Get next index and update index file atomically
+                AddToIndexWithNextIndex(key);
             }
             finally
             {
@@ -294,9 +293,8 @@
                     await fs.WriteAsync(data, 0, data.Length, token).ConfigureAwait(false);
                 }
 
-                // Add to index with the next available index
-                int index = GetLastIndex() + 1;
-                AddToIndex(key, index);
+                // Get next index and update index file atomically
+                AddToIndexWithNextIndex(key);
             }
             finally
             {
@@ -415,9 +413,10 @@
         /// <summary>
         /// Retrieve and remove the oldest item from the queue asynchronously.
         /// </summary>
+        /// <param name="remove">Whether to remove the item from the queue.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A task with the oldest item.</returns>
-        public async Task<T> DequeueAsync(CancellationToken token = default)
+        public async Task<T> DequeueAsync(bool remove = true, CancellationToken token = default)
         {
             string key = null;
             byte[] data = null;
@@ -448,9 +447,12 @@
                 _Semaphore.Release();
             }
 
-            Remove(key);
-            RemoveFromIndex(key);
-            DataDequeued?.Invoke(this, key);
+            if (remove)
+            {
+                Remove(key);
+                RemoveFromIndex(key);
+                DataDequeued?.Invoke(this, key);
+            }
 
             return _Deserializer(data);
         }
@@ -467,7 +469,7 @@
             if (String.IsNullOrEmpty(key))
             {
                 // If key is null, use the overload to get the oldest item
-                return remove ? await DequeueAsync(token).ConfigureAwait(false) : await PeekAsync(token).ConfigureAwait(false);
+                return remove ? await DequeueAsync(remove, token).ConfigureAwait(false) : await PeekAsync(token).ConfigureAwait(false);
             }
 
             byte[] data = null;
@@ -780,13 +782,14 @@
         /// <summary>
         /// Asynchronously attempts to dequeue an item from the queue.
         /// </summary>
+        /// <param name="remove">Whether to remove the item from the queue.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>A task with a tuple indicating success and the dequeued item.</returns>
-        public async Task<(bool success, T result)> TryDequeueAsync(CancellationToken token = default)
+        public async Task<(bool success, T result)> TryDequeueAsync(bool remove = true, CancellationToken token = default)
         {
             try
             {
-                var result = await DequeueAsync(token).ConfigureAwait(false);
+                var result = await DequeueAsync(remove, token).ConfigureAwait(false);
                 return (!EqualityComparer<T>.Default.Equals(result, default), result);
             }
             catch
@@ -1082,69 +1085,6 @@
             return File.Exists(GetKey(str));
         }
 
-        private Dictionary<string, int> GetIndexMap()
-        {
-            Dictionary<string, int> indexMap = new Dictionary<string, int>();
-            string filename = GetKey(_IndexFile);
-
-            lock (_IndexFileLock)
-            {
-                if (!File.Exists(filename))
-                    File.WriteAllBytes(filename, Array.Empty<byte>());
-
-                string[] lines = File.ReadAllLines(filename);
-
-                if (lines != null && lines.Length > 0)
-                {
-                    for (int i = 0; i < lines.Length; i++)
-                    {
-                        KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
-                        if (line == null) continue;
-                        indexMap[line.Value.Key] = line.Value.Value;
-                    }
-                }
-            }
-
-            return indexMap;
-        }
-
-        private int GetLastIndex()
-        {
-            Dictionary<string, int> indexMap = GetIndexMap();
-            if (indexMap.Count == 0) return -1;
-            return indexMap.Values.Max();
-        }
-
-        private void AddToIndex(string key, int index)
-        {
-            if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
-
-            string filename = GetKey(_IndexFile);
-
-            List<string> updatedLines = new List<string>();
-
-            lock (_IndexFileLock)
-            {
-                if (!File.Exists(filename))
-                    File.WriteAllBytes(filename, Array.Empty<byte>());
-
-                string[] lines = File.ReadAllLines(filename);
-
-                if (lines != null && lines.Length > 0)
-                {
-                    for (int i = 0; i < lines.Length; i++)
-                    {
-                        KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
-                        if (line == null) continue;
-                        if (!line.Value.Key.Equals(key)) updatedLines.Add(line.Value.Key + " " + line.Value.Value.ToString());
-                    }
-                }
-
-                updatedLines.Add(key + " " + index.ToString());
-                File.WriteAllLines(filename, updatedLines);
-            }
-        }
-
         private void RemoveFromIndex(string key)
         {
             if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
@@ -1199,7 +1139,7 @@
                 }
             }
         }
-
+            
         private string GetKeyByIndex(int index)
         {
             Dictionary<string, int> indexMap = GetIndexMap();
@@ -1243,6 +1183,63 @@
             return new KeyValuePair<string, int>(parts[0], index);
         }
 
+        private Dictionary<string, int> GetIndexMap()
+        {
+            Dictionary<string, int> indexMap = new Dictionary<string, int>();
+            string filename = GetKey(_IndexFile);
+
+            // Note: This method should only be called within a lock(_IndexFileLock) block
+            string[] lines = File.ReadAllLines(filename);
+
+            if (lines != null && lines.Length > 0)
+            {
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
+                    if (line == null) continue;
+                    indexMap[line.Value.Key] = line.Value.Value;
+                }
+            }
+
+            return indexMap;
+        }
+
+        private void AddToIndexWithNextIndex(string key)
+        {
+            if (String.IsNullOrEmpty(key)) throw new ArgumentNullException(nameof(key));
+
+            string filename = GetKey(_IndexFile);
+
+            lock (_IndexFileLock)
+            {
+                // Get the current index map
+                Dictionary<string, int> indexMap = GetIndexMap();
+
+                // Calculate next index
+                int nextIndex = indexMap.Count == 0 ? 0 : indexMap.Values.Max() + 1;
+
+                // Add new entry to index file
+                List<string> updatedLines = new List<string>();
+
+                if (File.Exists(filename))
+                {
+                    string[] lines = File.ReadAllLines(filename);
+
+                    if (lines != null && lines.Length > 0)
+                    {
+                        for (int i = 0; i < lines.Length; i++)
+                        {
+                            KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
+                            if (line == null) continue;
+                            if (!line.Value.Key.Equals(key)) updatedLines.Add(line.Value.Key + " " + line.Value.Value.ToString());
+                        }
+                    }
+                }
+
+                updatedLines.Add(key + " " + nextIndex.ToString());
+                File.WriteAllLines(filename, updatedLines);
+            }
+        }
         #endregion
     }
 }

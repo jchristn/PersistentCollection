@@ -343,22 +343,26 @@
             try
             {
                 // Get the item at index 0 (top of stack)
-                Dictionary<string, int> indexMap = GetIndexMap();
-                if (indexMap.Count == 0)
-                    throw new InvalidOperationException("The Stack is empty.");
-
-                // Find the key with index 0 (newest item)
-                foreach (var kvp in indexMap)
+                Dictionary<string, int> indexMap;
+                lock (_IndexFileLock)
                 {
-                    if (kvp.Value == 0)
-                    {
-                        key = kvp.Key;
-                        break;
-                    }
-                }
+                    indexMap = GetIndexMap();
+                    if (indexMap.Count == 0)
+                        throw new InvalidOperationException("The Stack is empty.");
 
-                if (key == null)
-                    throw new InvalidOperationException("Unable to find top item in stack.");
+                    // Find the key with index 0 (newest item)
+                    foreach (var kvp in indexMap)
+                    {
+                        if (kvp.Value == 0)
+                        {
+                            key = kvp.Key;
+                            break;
+                        }
+                    }
+
+                    if (key == null)
+                        throw new InvalidOperationException("Unable to find top item in stack.");
+                }
 
                 // Read the data
                 string actualKey = GetKey(key);
@@ -369,16 +373,32 @@
                     fs.Read(data, 0, size);
                 }
 
-                // Remove from index and update other indices
-                RemoveFromIndex(key);
-
-                // Decrement all indices greater than 0
-                foreach (var kvp in indexMap)
+                // Atomically update all indices
+                lock (_IndexFileLock)
                 {
-                    if (kvp.Key != key && kvp.Value > 0)
+                    // Get latest index map to handle any concurrent changes
+                    indexMap = GetIndexMap();
+
+                    // Remove the popped item and prepare updated indices
+                    List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+                    foreach (var kvp in indexMap)
                     {
-                        AddToIndex(kvp.Key, kvp.Value - 1);
+                        if (kvp.Key != key)
+                        {
+                            // Decrement indices for items after the popped one
+                            if (kvp.Value > 0)
+                            {
+                                updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, kvp.Value - 1));
+                            }
+                            else
+                            {
+                                updatedIndices.Add(kvp);
+                            }
+                        }
                     }
+
+                    // Write all updated indices at once
+                    SaveIndexMap(updatedIndices);
                 }
 
                 // Delete the file
@@ -679,24 +699,30 @@
 
             try
             {
+                // First write the file
                 using (FileStream fs = new FileStream(GetKey(key), FileMode.OpenOrCreate, FileAccess.Write))
                 {
                     fs.Write(data, 0, data.Length);
                 }
 
-                // Always add with index 0 (top of stack)
-                // This ensures newest items are at index 0
-                AddToIndex(key, 0);
-
-                // Move all other items down one position
-                Dictionary<string, int> indexMap = GetIndexMap();
-                foreach (var kvp in indexMap)
+                // Then atomically update the indices
+                lock (_IndexFileLock)
                 {
-                    if (kvp.Key != key && kvp.Value >= 0)
+                    // Get current index map
+                    Dictionary<string, int> indexMap = GetIndexMap();
+
+                    // Move all existing items down one position (increment index)
+                    List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+                    foreach (var kvp in indexMap)
                     {
-                        // Increment index for all existing items
-                        AddToIndex(kvp.Key, kvp.Value + 1);
+                        updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, kvp.Value + 1));
                     }
+
+                    // Add the new item at index 0 (top of stack)
+                    updatedIndices.Add(new KeyValuePair<string, int>(key, 0));
+
+                    // Write all updated indices at once
+                    SaveIndexMap(updatedIndices);
                 }
             }
             finally
@@ -708,6 +734,7 @@
 
             return key;
         }
+
 
         /// <summary>
         /// Add data to the stack asynchronously.
@@ -743,24 +770,30 @@
                 // Check for cancellation again after acquiring the semaphore
                 token.ThrowIfCancellationRequested();
 
+                // First write the file
                 using (FileStream fs = new FileStream(GetKey(key), FileMode.OpenOrCreate, FileAccess.Write))
                 {
                     await fs.WriteAsync(data, 0, data.Length, token).ConfigureAwait(false);
                 }
 
-                // Always add with index 0 (top of stack)
-                // This ensures newest items are at index 0
-                AddToIndex(key, 0);
-
-                // Move all other items down one position
-                Dictionary<string, int> indexMap = GetIndexMap();
-                foreach (var kvp in indexMap)
+                // Then atomically update the indices
+                lock (_IndexFileLock)
                 {
-                    if (kvp.Key != key && kvp.Value >= 0)
+                    // Get current index map
+                    Dictionary<string, int> indexMap = GetIndexMap();
+
+                    // Move all existing items down one position (increment index)
+                    List<KeyValuePair<string, int>> updatedIndices = new List<KeyValuePair<string, int>>();
+                    foreach (var kvp in indexMap)
                     {
-                        // Increment index for all existing items
-                        AddToIndex(kvp.Key, kvp.Value + 1);
+                        updatedIndices.Add(new KeyValuePair<string, int>(kvp.Key, kvp.Value + 1));
                     }
+
+                    // Add the new item at index 0 (top of stack)
+                    updatedIndices.Add(new KeyValuePair<string, int>(key, 0));
+
+                    // Write all updated indices at once
+                    SaveIndexMap(updatedIndices);
                 }
             }
             catch (OperationCanceledException)
@@ -1388,21 +1421,19 @@
             Dictionary<string, int> indexMap = new Dictionary<string, int>();
             string filename = GetKey(_IndexFile);
 
-            lock (_IndexFileLock)
+            // Note: This method should only be called within a lock(_IndexFileLock) block
+            if (!File.Exists(filename))
+                File.WriteAllBytes(filename, Array.Empty<byte>());
+
+            string[] lines = File.ReadAllLines(filename);
+
+            if (lines != null && lines.Length > 0)
             {
-                if (!File.Exists(filename))
-                    File.WriteAllBytes(filename, Array.Empty<byte>());
-
-                string[] lines = File.ReadAllLines(filename);
-
-                if (lines != null && lines.Length > 0)
+                for (int i = 0; i < lines.Length; i++)
                 {
-                    for (int i = 0; i < lines.Length; i++)
-                    {
-                        KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
-                        if (line == null) continue;
-                        indexMap[line.Value.Key] = line.Value.Value;
-                    }
+                    KeyValuePair<string, int>? line = ParseIndexLine(i, lines[i]);
+                    if (line == null) continue;
+                    indexMap[line.Value.Key] = line.Value.Value;
                 }
             }
 
@@ -1527,22 +1558,7 @@
             return new KeyValuePair<string, int>(parts[0], index);
         }
 
-        private void IncrementAllIndices()
-        {
-            Dictionary<string, int> indexMap = GetIndexMap();
-            Dictionary<string, int> newIndexMap = new Dictionary<string, int>();
-
-            // Increment each index by 1
-            foreach (var kvp in indexMap)
-            {
-                newIndexMap[kvp.Key] = kvp.Value + 1;
-            }
-
-            // Save the updated indices
-            SaveIndexMap(newIndexMap);
-        }
-
-        private void SaveIndexMap(Dictionary<string, int> indexMap)
+        private void SaveIndexMap(IEnumerable<KeyValuePair<string, int>> indexMap)
         {
             string filename = GetKey(_IndexFile);
             List<string> lines = new List<string>();
@@ -1552,10 +1568,8 @@
                 lines.Add(kvp.Key + " " + kvp.Value.ToString());
             }
 
-            lock (_IndexFileLock)
-            {
-                File.WriteAllLines(filename, lines);
-            }
+            // This should only be called when already holding the _IndexFileLock
+            File.WriteAllLines(filename, lines);
         }
 
         #endregion

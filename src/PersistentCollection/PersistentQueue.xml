@@ -633,10 +633,11 @@
             <param name="remove">Whether to remove the item from the queue.</param>
             <returns>The item at the specified index.</returns>
         </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.DequeueAsync(System.Threading.CancellationToken)">
+        <member name="M:PersistentCollection.PersistentQueue`1.DequeueAsync(System.Boolean,System.Threading.CancellationToken)">
             <summary>
             Retrieve and remove the oldest item from the queue asynchronously.
             </summary>
+            <param name="remove">Whether to remove the item from the queue.</param>
             <param name="token">Cancellation token.</param>
             <returns>A task with the oldest item.</returns>
         </member>
@@ -745,10 +746,11 @@
             <param name="result">When this method returns, contains the item if successful; otherwise, the default value.</param>
             <returns>true if an item was successfully retrieved; otherwise, false.</returns>
         </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.TryDequeueAsync(System.Threading.CancellationToken)">
+        <member name="M:PersistentCollection.PersistentQueue`1.TryDequeueAsync(System.Boolean,System.Threading.CancellationToken)">
             <summary>
             Asynchronously attempts to dequeue an item from the queue.
             </summary>
+            <param name="remove">Whether to remove the item from the queue.</param>
             <param name="token">Cancellation token.</param>
             <returns>A task with a tuple indicating success and the dequeued item.</returns>
         </member>
