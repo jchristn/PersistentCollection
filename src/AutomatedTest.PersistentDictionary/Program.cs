@@ -1001,7 +1001,9 @@
 
                 try
                 {
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
                     dict.Add(null, "Value");
+#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
                     AssertTrue(false, "Should throw ArgumentNullException for null key");
                 }
                 catch (ArgumentNullException)

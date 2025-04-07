@@ -2,20 +2,20 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1;net48;net8.0</TargetFrameworks>
-		<Version>2.0.11</Version>
+		<Version>2.0.12</Version>
 		<ApplicationIcon>Assets\icon.ico</ApplicationIcon>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<DocumentationFile>PersistentQueue.xml</DocumentationFile>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>PersistentCollection</Title>
 		<Authors>Joel Christner</Authors>
-		<Description>Lightweight, persistent, thread-safe, disk-based queue, stack, and list, written in C#</Description>
+		<Description>Lightweight, persistent, thread-safe, disk-based queue, stack, dictionary, and list, written in C#</Description>
 		<Copyright>(c)2025 Joel Christner</Copyright>
 		<PackageProjectUrl>https://github.com/jchristn/PQueue</PackageProjectUrl>
 		<PackageIcon>icon.png</PackageIcon>
 		<RepositoryUrl>https://github.com/jchristn/PersistentQueue</RepositoryUrl>
 		<RepositoryType>github</RepositoryType>
-		<PackageTags>queue stack list persistent persistence disk</PackageTags>
+		<PackageTags>queue stack dictionary list persistent persistence disk</PackageTags>
 		<PackageReleaseNotes>Initial release</PackageReleaseNotes>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
