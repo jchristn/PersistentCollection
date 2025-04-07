@@ -4,7 +4,7 @@
 
 [![NuGet Version](https://img.shields.io/nuget/v/PersistentCollection.svg?style=flat)](https://www.nuget.org/packages/PersistentCollection/) [![NuGet](https://img.shields.io/nuget/dt/PersistentCollection.svg)](https://www.nuget.org/packages/PersistentCollection) 
 
-Lightweight, persistent, thread-safe, disk-based collection classes written in C# for queue, stack, and list.  All classes leverage a file to enable persistence across instantiations of the object or restarts of the software.
+Lightweight, persistent, thread-safe, disk-based collection classes written in C# for queue, stack, dictionary, and list.  All classes leverage a file to enable persistence across instantiations of the object or restarts of the software.
 
 **IMPORTANT**:
 - To provide persistence, the internal data structure is persisted to disk *in full* any time a change is made
@@ -14,7 +14,7 @@ Lightweight, persistent, thread-safe, disk-based collection classes written in C
 ## New in v2.0.x
 
 - Remove expiration
-- Migrate existing implementation to `PersistentList`, `PersistentQueue`, and `PersistentStack`
+- Migrate existing implementation to `PersistentList`, `PersistentQueue`, `PersistentDictionary`, and `PersistentStack`
 - Rename package to `PersistentCollection`
 
 ## Getting Started
@@ -23,7 +23,7 @@ Refer to the ```Test``` project for a working example.
 
 ### PersistentList
 
-`PersistentList` mimics the behavior of `System.Collections.Generic.List<T>`.
+`PersistentList` implements the interface of `System.Collections.Generic.List<T>`.
 
 ```csharp
 using PersistentCollection;
@@ -59,6 +59,19 @@ PersistentStack<string> myStack = new PersistentStack<string>("./stack.idx");
 myStack.Push("foo");
 myStack.Push("bar");
 string val = myStack.Pop(); // bar
+```
+
+### PersistentDictionary
+
+`PersistentDictionary` implements the interface of `System.Collections.Generic.IDictionary<TKey, TValue>`.
+
+```csharp
+using PersistentCollection;
+
+PersistentDictionary<string, string> myDict = new PersistentDictionary<string, string>("./dict.idx");
+myDict.Add("name", "Joel");
+myDict.Add("hobbies", "code");
+string val = myDict["name"]; // Joel
 ```
 
 ## Version History

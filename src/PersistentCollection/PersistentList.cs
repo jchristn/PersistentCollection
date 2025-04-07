@@ -386,7 +386,15 @@
             {
                 if (_List == null) _List = new List<T>();
                 else _List.Clear();
-                _List = JsonSerializer.Deserialize<List<T>>(File.ReadAllText(_PersistenceFile));
+
+                if (File.Exists(_PersistenceFile))
+                {
+                    _List = new List<T>(JsonSerializer.Deserialize<List<T>>(File.ReadAllText(_PersistenceFile)));
+                }
+                else
+                {
+                    _List = new List<T>();
+                }
             }
         }
 

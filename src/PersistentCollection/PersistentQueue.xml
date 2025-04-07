@@ -4,6 +4,133 @@
         <name>PersistentCollection</name>
     </assembly>
     <members>
+        <member name="T:PersistentCollection.PersistentDictionary`2">
+            <summary>
+            Persistent dictionary. Dictionary entries are backed on disk.
+            Provides key-based access to data items.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentDictionary`2.IsSynchronized">
+            <summary>
+            Boolean indicating if the object is thread-safe.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentDictionary`2.SyncRoot">
+            <summary>
+            Object to use in synchronization across threads.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentDictionary`2.Count">
+            <summary>
+            Number of entries in the dictionary.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentDictionary`2.IsReadOnly">
+            <summary>
+            Boolean indicating if the dictionary is read-only. This will always be false.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentDictionary`2.Keys">
+            <summary>
+            Collection of keys.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentDictionary`2.Values">
+            <summary>
+            Collection of values.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentDictionary`2.Item(`0)">
+            <summary>
+            Retrieve by key.
+            </summary>
+            <param name="key">Key.</param>
+            <returns>Value associated with key.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Add(`0,`1)">
+            <summary>
+            Add a key-value pair.
+            </summary>
+            <param name="key">Key.</param>
+            <param name="value">Value.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Add(System.Collections.Generic.KeyValuePair{`0,`1})">
+            <summary>
+            Add a key-value pair.
+            </summary>
+            <param name="item">Key-value pair.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Clear">
+            <summary>
+            Clear the dictionary.
+            </summary>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Contains(System.Collections.Generic.KeyValuePair{`0,`1})">
+            <summary>
+            Check if the dictionary contains a key-value pair.
+            </summary>
+            <param name="item">Key-value pair.</param>
+            <returns>True if exists.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.ContainsKey(`0)">
+            <summary>
+            Check if the dictionary contains a key.
+            </summary>
+            <param name="key">Key.</param>
+            <returns>True if exists.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.CopyTo(System.Collections.Generic.KeyValuePair{`0,`1}[],System.Int32)">
+            <summary>
+            Copy the dictionary to an array.
+            </summary>
+            <param name="array">Array.</param>
+            <param name="arrayIndex">Array index.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Remove(System.Collections.Generic.KeyValuePair{`0,`1})">
+            <summary>
+            Remove a key-value pair.
+            </summary>
+            <param name="item">Key-value pair.</param>
+            <returns>True if removed.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Remove(`0)">
+            <summary>
+            Remove a key.
+            </summary>
+            <param name="key">Key.</param>
+            <returns>True if removed.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.TryGetValue(`0,`1@)">
+            <summary>
+            Try to get a value by key.
+            </summary>
+            <param name="key">Key.</param>
+            <param name="value">Value.</param>
+            <returns>True if successful.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.GetEnumerator">
+            <summary>
+            Get enumerator.
+            </summary>
+            <returns>Enumerator.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.#ctor(System.String)">
+            <summary>
+            Persistent dictionary.
+            </summary>
+            <param name="persistenceFile">Persistence file.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Dispose(System.Boolean)">
+            <summary>
+            Dispose.
+            </summary>
+            <param name="disposing">Disposing.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentDictionary`2.Dispose">
+            <summary>
+            Dispose.
+            </summary>
+        </member>
         <member name="T:PersistentCollection.PersistentList`1">
             <summary>
             Persistent list. List entries are backed on disk.

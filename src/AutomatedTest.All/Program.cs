@@ -11,6 +11,7 @@
         private static string listFile = "./persistentList.idx";
         private static string queueFile = "./persistentQueue.idx";
         private static string stackFile = "./persistentStack.idx";
+        private static string dictionaryFile = "./persistentDictionary.idx";
 
         static void Main(string[] args)
         {
@@ -21,6 +22,7 @@
                 DemonstratePersistentList(listFile);
                 DemonstratePersistentQueue(queueFile);
                 DemonstratePersistentStack(stackFile);
+                DemonstratePersistentDictionary(dictionaryFile);
             }
             finally
             {
@@ -29,6 +31,7 @@
                 CleanupFile(listFile);
                 CleanupFile(queueFile);
                 CleanupFile(stackFile);
+                CleanupFile(dictionaryFile);
             }
 
             Console.WriteLine("\nPress any key to exit...");
@@ -202,6 +205,94 @@
                 }
 
                 Console.WriteLine($"Stack count after popping: {stack.Count}");
+            }
+            Console.WriteLine("Second instance disposed.\n");
+        }
+
+        static void DemonstratePersistentDictionary(string filePath)
+        {
+            Console.WriteLine("=== PERSISTENT DICTIONARY DEMONSTRATION ===");
+
+            // First instance - add data
+            Console.WriteLine("Creating first PersistentDictionary instance and adding data...");
+            using (var dictionary = new PersistentDictionary<string, string>(filePath))
+            {
+                // Clear any existing data
+                dictionary.Clear();
+
+                // Add items
+                Console.WriteLine("Adding key-value pairs to dictionary:");
+                Console.WriteLine("  Adding: 'name' -> 'John Doe'");
+                dictionary.Add("name", "John Doe");
+                Console.WriteLine("  Adding: 'email' -> 'john@example.com'");
+                dictionary.Add("email", "john@example.com");
+                Console.WriteLine("  Adding: 'phone' -> '555-1234'");
+                dictionary.Add("phone", "555-1234");
+
+                Console.WriteLine($"Added 3 key-value pairs to dictionary. Count: {dictionary.Count}");
+            }
+            Console.WriteLine("First instance disposed.");
+
+            // Second instance - retrieve data
+            Console.WriteLine("\nCreating second PersistentDictionary instance to retrieve data...");
+            using (var dictionary = new PersistentDictionary<string, string>(filePath))
+            {
+                Console.WriteLine($"Retrieved dictionary with {dictionary.Count} key-value pairs:");
+
+                // Display all key-value pairs
+                foreach (var pair in dictionary)
+                {
+                    Console.WriteLine($"  '{pair.Key}' -> '{pair.Value}'");
+                }
+
+                // Try retrieving specific values
+                Console.WriteLine("\nTrying to access specific keys:");
+
+                if (dictionary.TryGetValue("name", out string nameValue))
+                {
+                    Console.WriteLine($"  Found 'name': {nameValue}");
+                }
+
+                if (dictionary.TryGetValue("email", out string emailValue))
+                {
+                    Console.WriteLine($"  Found 'email': {emailValue}");
+                }
+
+                if (dictionary.TryGetValue("nonexistent", out string missingValue))
+                {
+                    Console.WriteLine($"  Found 'nonexistent': {missingValue}");
+                }
+                else
+                {
+                    Console.WriteLine("  'nonexistent' key not found");
+                }
+
+                // Update a value
+                Console.WriteLine("\nUpdating 'phone' value:");
+                dictionary["phone"] = "555-5678";
+                Console.WriteLine($"  New value: '{dictionary["phone"]}'");
+
+                // Add a new key-value pair using indexer
+                Console.WriteLine("\nAdding new key-value pair using indexer:");
+                dictionary["address"] = "123 Main St";
+                Console.WriteLine($"  Added: 'address' -> '{dictionary["address"]}'");
+                Console.WriteLine($"  Dictionary count: {dictionary.Count}");
+
+                // Remove items
+                Console.WriteLine("\nRemoving key-value pairs:");
+
+                string[] keysToRemove = { "name", "email", "phone", "address" };
+                foreach (var key in keysToRemove)
+                {
+                    if (dictionary.ContainsKey(key))
+                    {
+                        string value = dictionary[key];
+                        dictionary.Remove(key);
+                        Console.WriteLine($"  Removed: '{key}' -> '{value}'");
+                    }
+                }
+
+                Console.WriteLine($"Dictionary count after removal: {dictionary.Count}");
             }
             Console.WriteLine("Second instance disposed.\n");
         }
