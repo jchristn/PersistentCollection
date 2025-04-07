@@ -8,15 +8,10 @@
     public static class Program
     {
         private static bool _RunForever = true;
-        private static PersistentList<string> _List = new PersistentList<string>("./temp/", true);
+        private static PersistentList<string> _List = new PersistentList<string>("./temp/");
 
         public static void Main(string[] args)
         {
-            _List.DataAdded += (s, key) => Console.WriteLine("Data added: " + key);
-            _List.DataRemoved += (s, key) => Console.WriteLine("Data removed: " + key);
-            _List.DataUpdated += (s, key) => Console.WriteLine("Data updated: " + key);
-            _List.Cleared += (s, _) => Console.WriteLine("List cleared");
-
             while (_RunForever)
             {
                 string input = Inputty.GetString("Command [?/help]:", null, false);
@@ -43,28 +38,12 @@
                         Get();
                         break;
 
-                    case "getbyindex":
-                        GetByIndex();
-                        break;
-
-                    case "update":
-                        Update();
-                        break;
-
-                    case "updatebyindex":
-                        UpdateByIndex();
-                        break;
-
-                    case "keys":
-                        ListKeys();
+                    case "set":
+                        Set();
                         break;
 
                     case "count":
                         Console.WriteLine(_List.Count);
-                        break;
-
-                    case "length":
-                        Console.WriteLine(_List.Length + " bytes");
                         break;
 
                     case "remove":
@@ -96,13 +75,9 @@
             Console.WriteLine("   ?             help, this menu");
             Console.WriteLine("   cls           clear the screen");
             Console.WriteLine("   add           add to the list");
-            Console.WriteLine("   get           read from the list by key");
-            Console.WriteLine("   getbyindex    read from the list by index");
-            Console.WriteLine("   update        update existing item in the list by key");
-            Console.WriteLine("   updatebyindex update existing item in the list by index");
-            Console.WriteLine("   keys          list all keys in order");
+            Console.WriteLine("   get           read from the list by index");
+            Console.WriteLine("   set           set the value at a specific index");
             Console.WriteLine("   count         show the list count");
-            Console.WriteLine("   length        show the list length in bytes");
             Console.WriteLine("   remove        remove record from list by key");
             Console.WriteLine("   removeat      remove record from list by index");
             Console.WriteLine("   clear         empty the list");
@@ -114,21 +89,17 @@
         {
             string data = Inputty.GetString("Data:", null, true);
             if (String.IsNullOrEmpty(data)) return;
-
-            byte[] bytes = Encoding.UTF8.GetBytes(data);
-            string key = _List.Add(bytes);
-            Console.WriteLine("Key: " + key);
+            _List.Add(data);
         }
 
         private static void Get()
         {
-            string key = Inputty.GetString("Key:", null, true);
-            if (String.IsNullOrEmpty(key)) return;
+            int idx = Inputty.GetInteger("Index:", 0, true, true);
 
             try
             {
-                byte[] msg = _List.Get(key);
-                Console.WriteLine(Encoding.UTF8.GetString(msg));
+                string data = _List[idx];
+                Console.WriteLine(data);
             }
             catch (Exception ex)
             {
@@ -136,54 +107,19 @@
             }
         }
 
-        private static void GetByIndex()
+        private static void Set()
         {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
-            {
-                byte[] msg = _List.Get(index);
-                Console.WriteLine(Encoding.UTF8.GetString(msg));
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-        }
-
-        private static void Update()
-        {
-            string key = Inputty.GetString("Key:", null, true);
-            if (String.IsNullOrEmpty(key)) return;
-
-            string data = Inputty.GetString("New data:", null, true);
+            int idx = Inputty.GetInteger("Index:", 0, true, true);
+            string data = Inputty.GetString("Data :", null, true);
             if (String.IsNullOrEmpty(data)) return;
 
             try
             {
-                byte[] bytes = Encoding.UTF8.GetBytes(data);
-                _List.Update(key, bytes);
+                _List[idx] = data;
             }
             catch (Exception ex)
             {
                 Console.WriteLine("Error: " + ex.Message);
-            }
-        }
-
-        private static void ListKeys()
-        {
-            var keys = _List.GetKeys();
-
-            if (keys.Count == 0)
-            {
-                Console.WriteLine("List is empty");
-                return;
-            }
-
-            for (int i = 0; i < keys.Count; i++)
-            {
-                Console.WriteLine($"[{i}] {keys[i]}");
             }
         }
 

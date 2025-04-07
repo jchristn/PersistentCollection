@@ -6,6 +6,11 @@
 
 Lightweight, persistent, thread-safe, disk-based collection classes written in C# for queue, stack, and list.  All classes leverage a temporary directory for storage to enable persistence across instantiations of the object or restarts of the software.
 
+**IMPORTANT**:
+- To provide persistence, the internal data structure is persisted to disk *in full* any time a change is made
+- Thus, this library is NOT APPROPRIATE for large amounts of data or a large number of records
+- It is recommended that these classes be used sparingly, when record counts are less than 1000 and total size is less than 10MB
+
 ## New in v2.0.x
 
 - Remove expiration
@@ -23,7 +28,7 @@ Refer to the ```Test``` project for a working example.
 ```csharp
 using PersistentCollection;
 
-PersistentList<string> myList = new PersistentList<string>("./temp"); // data directory
+PersistentList<string> myList = new PersistentList<string>("./list.idx"); 
 myList.Add("foo");
 myList.Add("bar");
 string val = myList.Get(1);
@@ -37,7 +42,7 @@ myList.RemoveAt(1);
 ```csharp
 using PersistentCollection;
 
-PersistentQueue<string> myQueue = new PersistentQueue<string>("./temp"); // data directory
+PersistentQueue<string> myQueue = new PersistentQueue<string>("./queue.idx");
 myQueue.Enqueue("foo");
 myQueue.Enqueue("bar");
 string val = myQueue.Dequeue(); // foo
@@ -50,7 +55,7 @@ string val = myQueue.Dequeue(); // foo
 ```csharp
 using PersistentCollection;
 
-PersistentStack<string> myStack = new PersistentStack<string>("./temp"); // data directory
+PersistentStack<string> myStack = new PersistentStack<string>("./stack.idx");
 myStack.Push("foo");
 myStack.Push("bar");
 string val = myStack.Pop(); // bar

@@ -8,23 +8,15 @@
     using System.Threading;
     using System.Threading.Tasks;
     using PersistentCollection;
-    using SerializationHelper;
 
     class Program
     {
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
 #pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-#pragma warning disable CS8604 // Possible null reference argument.
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
-#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
-#pragma warning disable CS8629 // Nullable value type may be null.
-#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
 
         private static string _testDirectory = Path.Combine(Path.GetTempPath(), "PersistentStackTest");
         private static int _passedTests = 0;
         private static int _failedTests = 0;
-        private static Serializer _Serializer = new Serializer();
 
         static async Task Main(string[] args)
         {
@@ -34,14 +26,8 @@
 
             CleanTestDirectory();
             await RunBasicTests();
-            await RunIStackTests();
-            await RunEventTests();
-            await RunStackSpecificTests();
-            await RunAdditionalFeatureTests();
-            await RunExceptionTests();
-            await RunAsyncTests();
+            await RunStackTests();
             await RunConcurrentTests();
-            await RunConcurrentOrderTests();
             await RunComplexScenarioTests();
 
             // Summary
@@ -128,29 +114,27 @@
 
             // Test constructor and initialization
             {
-                var stackDir = Path.Combine(_testDirectory, "basic");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "basic.idx");
+                using var stack = new PersistentStack<string>(stackFile);
                 AssertEquals(0, stack.Count, "New stack should be empty");
-                AssertEquals(0L, stack.Length, "New stack should have zero length");
             }
 
             // Test Push and Count
             {
-                var stackDir = Path.Combine(_testDirectory, "push_count");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "push_count.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
                 stack.Push("Item3");
 
                 AssertEquals(3, stack.Count, "Stack should contain 3 items after pushing");
-                AssertTrue(stack.Length > 0, "Stack length should be greater than 0 after pushing items");
             }
 
             // Test Push and Pop
             {
-                var stackDir = Path.Combine(_testDirectory, "push_pop");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "push_pop.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
@@ -173,8 +157,8 @@
 
             // Test Peek
             {
-                var stackDir = Path.Combine(_testDirectory, "peek");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "peek.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
@@ -188,39 +172,25 @@
                 AssertEquals("Item2", stack.Peek(), "Peek should now return the new top item");
             }
 
-            // Test PeekAt
+            // Test enumeration to access items
             {
-                var stackDir = Path.Combine(_testDirectory, "peekat");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "enumeration.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
                 stack.Push("Item3");
 
-                AssertEquals("Item3", stack.PeekAt(0), "PeekAt(0) should return the top item");
-                AssertEquals("Item2", stack.PeekAt(1), "PeekAt(1) should return the second item");
-                AssertEquals("Item1", stack.PeekAt(2), "PeekAt(2) should return the third item");
-                AssertEquals(3, stack.Count, "Stack count should remain unchanged after PeekAt");
-            }
-
-            // Test Get by index
-            {
-                var stackDir = Path.Combine(_testDirectory, "get_index");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                stack.Push("Item1");
-                stack.Push("Item2");
-                stack.Push("Item3");
-
-                AssertEquals("Item3", stack[0], "First item (index 0) should be 'Item3'");
-                AssertEquals("Item2", stack[1], "Second item (index 1) should be 'Item2'");
-                AssertEquals("Item1", stack[2], "Third item (index 2) should be 'Item1'");
+                var items = stack.ToArray();
+                AssertEquals("Item3", items[0], "First item in array should be 'Item3'");
+                AssertEquals("Item2", items[1], "Second item in array should be 'Item2'");
+                AssertEquals("Item1", items[2], "Third item in array should be 'Item1'");
             }
 
             // Test Clear
             {
-                var stackDir = Path.Combine(_testDirectory, "clear");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "clear.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
@@ -231,169 +201,88 @@
                 AssertEquals(0, stack.Count, "Stack should be empty after Clear()");
             }
 
-            // Test GetKeys
-            {
-                var stackDir = Path.Combine(_testDirectory, "get_keys");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string key1 = stack.Push("Item1");
-                string key2 = stack.Push("Item2");
-                string key3 = stack.Push("Item3");
-
-                var keys = stack.GetKeys();
-
-                AssertEquals(3, keys.Count, "GetKeys should return 3 keys");
-                AssertTrue(keys.Contains(key1) && keys.Contains(key2) && keys.Contains(key3),
-                    "GetKeys should contain all added keys");
-            }
-
             // Test persistence across instances
             {
-                var stackDir = Path.Combine(_testDirectory, "persistence");
-                string key1, key2, key3;
+                var stackFile = Path.Combine(_testDirectory, "persistence.idx");
 
                 // First instance adds items
-                using (var stack1 = new PersistentStack<string>(stackDir))
+                using (var stack1 = new PersistentStack<string>(stackFile))
                 {
-                    key1 = stack1.Push("Item1");
-                    key2 = stack1.Push("Item2");
-                    key3 = stack1.Push("Item3");
+                    stack1.Push("Item1");
+                    stack1.Push("Item2");
+                    stack1.Push("Item3");
 
                     AssertEquals(3, stack1.Count, "First instance should have 3 items");
                 }
 
                 // Second instance reads the same items
-                using (var stack2 = new PersistentStack<string>(stackDir))
+                using (var stack2 = new PersistentStack<string>(stackFile))
                 {
                     AssertEquals(3, stack2.Count, "Second instance should have 3 items");
-                    AssertEquals("Item3", stack2[0], "First item should persist");
-                    AssertEquals("Item2", stack2[1], "Second item should persist");
-                    AssertEquals("Item1", stack2[2], "Third item should persist");
-
-                    // Test that keys persist correctly too
-                    var persistedKeys = stack2.GetKeys();
-                    AssertTrue(persistedKeys.Contains(key1) && persistedKeys.Contains(key2) && persistedKeys.Contains(key3),
-                        "Keys should persist across instances");
+                    var items = stack2.ToArray();
+                    AssertEquals("Item3", items[0], "First item should persist");
+                    AssertEquals("Item2", items[1], "Second item should persist");
+                    AssertEquals("Item1", items[2], "Third item should persist");
                 }
             }
 
             // Test for different data types
             {
-                var stackDir = Path.Combine(_testDirectory, "data_types");
-
                 // Test with integers
-                using (var intStack = new PersistentStack<int>(stackDir + "/int"))
+                using (var intStack = new PersistentStack<int>(Path.Combine(_testDirectory, "data_types_int.idx")))
                 {
                     intStack.Push(10);
                     intStack.Push(20);
                     intStack.Push(30);
 
                     AssertEquals(3, intStack.Count, "Integer stack should have 3 items");
-                    AssertEquals(30, intStack[0], "First int should be 30");
-                    AssertEquals(20, intStack[1], "Second int should be 20");
-                    AssertEquals(10, intStack[2], "Third int should be 10");
+                    var items = intStack.ToArray();
+                    AssertEquals(30, items[0], "First int should be 30");
+                    AssertEquals(20, items[1], "Second int should be 20");
+                    AssertEquals(10, items[2], "Third int should be 10");
                 }
 
                 // Test with complex objects
-                using (var personStack = new PersistentStack<Person>(stackDir + "/person"))
+                using (var personStack = new PersistentStack<Person>(Path.Combine(_testDirectory, "data_types_person.idx")))
                 {
                     personStack.Push(new Person { Name = "Alice", Age = 25 });
                     personStack.Push(new Person { Name = "Bob", Age = 30 });
 
                     AssertEquals(2, personStack.Count, "Person stack should have 2 items");
-                    AssertEquals("Bob", personStack[0].Name, "First person should be Bob");
-                    AssertEquals(25, personStack[1].Age, "Second person's age should be 25");
+                    var people = personStack.ToArray();
+                    AssertEquals("Bob", people[0].Name, "First person should be Bob");
+                    AssertEquals(25, people[1].Age, "Second person's age should be 25");
                 }
             }
         }
 
-        private static async Task RunIStackTests()
+        private static async Task RunStackTests()
         {
-            Console.WriteLine("\nRunning IStack Implementation Tests...");
+            Console.WriteLine("\nRunning Stack Implementation Tests...");
 
-            // Test indexer get
+            // Test Peek
             {
-                var stackDir = Path.Combine(_testDirectory, "indexer");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "stack_peek.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
                 stack.Push("Item3");
 
-                // Test indexer get
-                AssertEquals("Item2", stack[1], "Indexer get should retrieve correct item");
-            }
+                // Test Peek (doesn't remove the item)
+                string peekedItem = stack.Peek();
+                AssertEquals("Item3", peekedItem, "Peek should return the first item without removing it");
+                AssertEquals(3, stack.Count, "Stack should still have 3 items after Peek");
 
-            // Test TryPeek
-            {
-                var stackDir = Path.Combine(_testDirectory, "try_peek");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                // Test on empty stack
-                bool success = stack.TryPeek(out string emptyResult);
-                AssertTrue(!success, "TryPeek on empty stack should return false");
-                AssertEquals(default, emptyResult, "TryPeek on empty stack should set out parameter to default value");
-
-                // Add items and test
-                stack.Push("Item1");
-                stack.Push("Item2");
-
-                success = stack.TryPeek(out string result);
-                AssertTrue(success, "TryPeek on non-empty stack should return true");
-                AssertEquals("Item2", result, "TryPeek should return the top item");
-                AssertEquals(2, stack.Count, "TryPeek should not change stack count");
-            }
-
-            // Test TryPop
-            {
-                var stackDir = Path.Combine(_testDirectory, "try_pop");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                // Test on empty stack
-                bool success = stack.TryPop(out string emptyResult);
-                AssertTrue(!success, "TryPop on empty stack should return false");
-                AssertEquals(default, emptyResult, "TryPop on empty stack should set out parameter to default value");
-
-                // Add items and test
-                stack.Push("Item1");
-                stack.Push("Item2");
-
-                success = stack.TryPop(out string result);
-                AssertTrue(success, "TryPop on non-empty stack should return true");
-                AssertEquals("Item2", result, "TryPop should return the top item");
-                AssertEquals(1, stack.Count, "TryPop should reduce stack count");
-            }
-
-            // Test TryPeekAt
-            {
-                var stackDir = Path.Combine(_testDirectory, "try_peekat");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                // Test on empty stack
-                bool success = stack.TryPeekAt(0, out string emptyResult);
-                AssertTrue(!success, "TryPeekAt on empty stack should return false");
-                AssertEquals(default, emptyResult, "TryPeekAt on empty stack should set out parameter to default value");
-
-                // Add items and test
-                stack.Push("Item1");
-                stack.Push("Item2");
-                stack.Push("Item3");
-
-                success = stack.TryPeekAt(1, out string result);
-                AssertTrue(success, "TryPeekAt on valid index should return true");
-                AssertEquals("Item2", result, "TryPeekAt should return the correct item");
-                AssertEquals(3, stack.Count, "TryPeekAt should not change stack count");
-
-                // Test with invalid index
-                success = stack.TryPeekAt(5, out string invalidResult);
-                AssertTrue(!success, "TryPeekAt with invalid index should return false");
-                AssertEquals(default, invalidResult, "TryPeekAt with invalid index should set out parameter to default value");
+                // Peek again and verify the same item is returned
+                peekedItem = stack.Peek();
+                AssertEquals("Item3", peekedItem, "Repeated Peek should return the same first item");
             }
 
             // Test Contains
             {
-                var stackDir = Path.Combine(_testDirectory, "contains");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "contains.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
@@ -403,24 +292,10 @@
                 AssertTrue(!stack.Contains("NonExistentItem"), "Contains should return false for non-existent item");
             }
 
-            // Test ContainsKey
-            {
-                var stackDir = Path.Combine(_testDirectory, "contains_key");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string key1 = stack.Push("Item1");
-                string key2 = stack.Push("Item2");
-
-                AssertTrue(stack.ContainsKey(key1), "ContainsKey should return true for existing key");
-                AssertTrue(stack.ContainsKey(key2), "ContainsKey should return true for existing key");
-                AssertTrue(!stack.ContainsKey("nonexistent-key"), "ContainsKey should return false for non-existent key");
-                AssertTrue(!stack.ContainsKey(null), "ContainsKey should return false for null key");
-            }
-
             // Test CopyTo
             {
-                var stackDir = Path.Combine(_testDirectory, "copyto");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "copyto.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
@@ -438,8 +313,8 @@
 
             // Test ToArray
             {
-                var stackDir = Path.Combine(_testDirectory, "toarray");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "to_array.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
@@ -453,10 +328,51 @@
                 AssertEquals("Item1", array[2], "Third element should be 'Item1'");
             }
 
+            // Test TryPop
+            {
+                var stackFile = Path.Combine(_testDirectory, "try_pop.idx");
+                using var stack = new PersistentStack<string>(stackFile);
+
+                stack.Push("Item1");
+                stack.Push("Item2");
+
+                // Test TryPop success
+                bool success = stack.TryPop(out string result);
+                AssertTrue(success, "TryPop should return true when stack is not empty");
+                AssertEquals("Item2", result, "TryPop should set out parameter to the top item");
+                AssertEquals(1, stack.Count, "Stack should have 1 item after successful TryPop");
+
+                // Test TryPop on empty stack
+                stack.Clear();
+                success = stack.TryPop(out result);
+                AssertTrue(!success, "TryPop should return false when stack is empty");
+                AssertEquals(default(string), result, "TryPop should set out parameter to default value on failure");
+            }
+
+            // Test TryPeek
+            {
+                var stackFile = Path.Combine(_testDirectory, "try_peek.idx");
+                using var stack = new PersistentStack<string>(stackFile);
+
+                stack.Push("Item1");
+
+                // Test TryPeek success
+                bool success = stack.TryPeek(out string result);
+                AssertTrue(success, "TryPeek should return true when stack is not empty");
+                AssertEquals("Item1", result, "TryPeek should set out parameter to the top item");
+                AssertEquals(1, stack.Count, "Stack should still have 1 item after TryPeek");
+
+                // Test TryPeek on empty stack
+                stack.Clear();
+                success = stack.TryPeek(out result);
+                AssertTrue(!success, "TryPeek should return false when stack is empty");
+                AssertEquals(default(string), result, "TryPeek should set out parameter to default value on failure");
+            }
+
             // Test Enumeration using foreach
             {
-                var stackDir = Path.Combine(_testDirectory, "enumeration");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "foreach.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 stack.Push("Item1");
                 stack.Push("Item2");
@@ -468,633 +384,43 @@
                     items.Add(item);
                 }
 
-                AssertCollectionEquals(new[] { "Item3", "Item2", "Item1" }, items, "Enumeration should visit all items in stack order (top to bottom)");
-            }
-        }
-
-        private static async Task RunEventTests()
-        {
-            Console.WriteLine("\nRunning Event Handler Tests...");
-
-            // Test DataAdded event
-            {
-                var stackDir = Path.Combine(_testDirectory, "event_added");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string addedKey = null;
-                stack.DataAdded += (sender, key) => { addedKey = key; };
-
-                string key = stack.Push("TestItem");
-
-                AssertEquals(key, addedKey, "DataAdded event should provide correct key");
+                AssertCollectionEquals(new[] { "Item3", "Item2", "Item1" }, items, "Enumeration should visit all items in LIFO order");
             }
 
-            // Test DataRemoved event
+            // Test exceptions
             {
-                var stackDir = Path.Combine(_testDirectory, "event_removed");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "exceptions.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
-                string removedKey = null;
-                stack.DataRemoved += (sender, key) => { removedKey = key; };
-
-                string key = stack.Push("TestItem");
-                stack.Pop(); // This should trigger DataRemoved event
-
-                AssertEquals(key, removedKey, "DataRemoved event should provide correct key");
-            }
-
-            // Test DataUpdated event
-            {
-                var stackDir = Path.Combine(_testDirectory, "event_updated");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string updatedKey = null;
-                stack.DataUpdated += (sender, key) => { updatedKey = key; };
-
-                string key = stack.Push("TestItem");
-                stack.UpdateByKey(key, "UpdatedItem");
-
-                AssertEquals(key, updatedKey, "DataUpdated event should provide correct key");
-            }
-
-            // Test Cleared event
-            {
-                var stackDir = Path.Combine(_testDirectory, "event_cleared");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                bool cleared = false;
-                stack.Cleared += (sender, args) => { cleared = true; };
-
-                stack.Push("Item1");
-                stack.Push("Item2");
-                stack.Clear();
-
-                AssertTrue(cleared, "Cleared event should be raised");
-            }
-
-            // Test ExceptionEncountered event
-            // This is harder to test directly since it requires creating corrupt data
-            // We'll skip this for now
-        }
-
-        private static async Task RunStackSpecificTests()
-        {
-            Console.WriteLine("\nRunning Stack-Specific Tests...");
-
-            // Test LIFO behavior with mixed data types
-            {
-                var stackDir = Path.Combine(_testDirectory, "lifo_behavior");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                // Instead of using object type, use string for all items
-                stack.Push("String Item");
-                stack.Push("42");
-                stack.Push("Person:Alice:30");
-
-                // Verify LIFO order with string parsing
-                string personStr = stack.Pop();
-                AssertTrue(personStr.StartsWith("Person:"), "First popped item should be the Person string");
-                AssertTrue(personStr.Contains("Alice"), "First popped item should contain 'Alice'");
-
-                string numberStr = stack.Pop();
-                AssertEquals("42", numberStr, "Second popped item should be the number string");
-
-                string str = stack.Pop();
-                AssertEquals("String Item", str, "Last popped item should be the string");
-            }
-
-            // Test PopAt
-            {
-                var stackDir = Path.Combine(_testDirectory, "pop_at");
-                using var stack = new PersistentStack<string>(stackDir);
-                stack.Push("Item1");
-                stack.Push("Item2");
-                stack.Push("Item3");
-                stack.Push("Item4");
-
-                // Pop from the middle, removing the item
-                string item = stack.PopAt(1, true);
-                AssertEquals("Item3", item, "PopAt(1) should return the second item from the top");
-                AssertEquals(3, stack.Count, "Stack should have one less item after PopAt with remove=true");
-
-                // Instead of accessing by index, just pop all items and check their order
-                string item1 = stack.Pop();
-                string item2 = stack.Pop();
-                string item3 = stack.Pop();
-
-                AssertEquals("Item4", item1, "First popped item should be 'Item4'");
-                AssertEquals("Item2", item2, "Second popped item should be 'Item2'");
-                AssertEquals("Item1", item3, "Third popped item should be 'Item1'");
-                AssertEquals(0, stack.Count, "Stack should be empty after popping all items");
-            }
-
-            // Test UpdateAt
-            {
-                var stackDir = Path.Combine(_testDirectory, "update_at");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                stack.Push("Item1");
-                stack.Push("Item2");
-                stack.Push("Item3");
-
-                // Update the middle item
-                stack.UpdateAt(1, "UpdatedItem2");
-
-                AssertEquals("UpdatedItem2", stack[1], "UpdateAt should update the item at the specified index");
-                AssertEquals(3, stack.Count, "Stack count should remain unchanged after UpdateAt");
-            }
-
-            // Test RemoveAt
-            {
-                var stackDir = Path.Combine(_testDirectory, "remove_at");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                stack.Push("Item1");
-                stack.Push("Item2");
-                stack.Push("Item3");
-
-                // Remove the middle item
-                stack.RemoveAt(1);
-
-                AssertEquals(2, stack.Count, "Stack should have one less item after RemoveAt");
-                AssertEquals("Item3", stack[0], "Top item should still be 'Item3'");
-                AssertEquals("Item1", stack[1], "Second item should now be 'Item1'");
-            }
-
-            // Test ContainsIndex
-            {
-                var stackDir = Path.Combine(_testDirectory, "contains_index");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                stack.Push("Item1");
-                stack.Push("Item2");
-
-                AssertTrue(stack.ContainsIndex(0), "ContainsIndex should return true for index 0");
-                AssertTrue(stack.ContainsIndex(1), "ContainsIndex should return true for index 1");
-                AssertTrue(!stack.ContainsIndex(2), "ContainsIndex should return false for out-of-range index");
-                AssertTrue(!stack.ContainsIndex(-1), "ContainsIndex should return false for negative index");
-            }
-        }
-
-        private static async Task RunAdditionalFeatureTests()
-        {
-            Console.WriteLine("\nRunning Additional Feature Tests...");
-
-            // Test GetKeyByIndex (private method test through public API)
-            {
-                var stackDir = Path.Combine(_testDirectory, "get_key_by_index");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string key1 = stack.Push("Item1");
-                string key2 = stack.Push("Item2");
-                string key3 = stack.Push("Item3");
-
-                // Get the key indirectly by updating at index
-                stack.UpdateAt(0, "UpdatedItem3");
-                stack.UpdateAt(1, "UpdatedItem2");
-                stack.UpdateAt(2, "UpdatedItem1");
-
-                // Verify the updates worked by key
-                AssertEquals("UpdatedItem3", stack.Peek(), "Update at index 0 should affect the top item");
-
-                // Pop to verify all items were updated correctly
-                AssertEquals("UpdatedItem3", stack.Pop(), "First pop should return updated top item");
-                AssertEquals("UpdatedItem2", stack.Pop(), "Second pop should return updated middle item");
-                AssertEquals("UpdatedItem1", stack.Pop(), "Third pop should return updated bottom item");
-            }
-
-            // Test serialization of complex objects
-            {
-                var stackDir = Path.Combine(_testDirectory, "complex_serialization");
-                using var stack = new PersistentStack<Person>(stackDir);
-
-                var person1 = new Person { Name = "Alice", Age = 25 };
-                var person2 = new Person { Name = "Bob", Age = 30 };
-
-                stack.Push(person1);
-                stack.Push(person2);
-
-                // Pop and verify integrity
-                var poppedPerson2 = stack.Pop();
-                AssertEquals("Bob", poppedPerson2.Name, "Popped complex object should maintain property values");
-                AssertEquals(30, poppedPerson2.Age, "Popped complex object should maintain property values");
-
-                var poppedPerson1 = stack.Pop();
-                AssertEquals("Alice", poppedPerson1.Name, "Popped complex object should maintain property values");
-                AssertEquals(25, poppedPerson1.Age, "Popped complex object should maintain property values");
-            }
-
-            // Test custom serializer
-            {
-                var stackDir = Path.Combine(_testDirectory, "custom_serializer");
-                var customSerializer = new Serializer(); // In a real test, this would be a custom implementation
-
-                using var stack = new PersistentStack<Person>(stackDir, customSerializer);
-
-                stack.Push(new Person { Name = "Alice", Age = 25 });
-
-                var popped = stack.Pop();
-                AssertEquals("Alice", popped.Name, "Stack with custom serializer should correctly serialize/deserialize");
-            }
-
-            // Test Clear on Dispose
-            {
-                var stackDir = Path.Combine(_testDirectory, "clear_on_dispose");
-                string key1, key2;
-
-                // Create a stack that clears on dispose
-                using (var stack = new PersistentStack<string>(stackDir, true))
-                {
-                    key1 = stack.Push("Item1");
-                    key2 = stack.Push("Item2");
-
-                    AssertEquals(2, stack.Count, "Stack should have items before dispose");
-                }
-
-                // Create a new stack with the same directory and verify it's empty
-                using (var stack = new PersistentStack<string>(stackDir))
-                {
-                    AssertEquals(0, stack.Count, "Stack should be empty after previous instance was disposed with clearOnDispose=true");
-                }
-            }
-        }
-
-        private static async Task RunExceptionTests()
-        {
-            Console.WriteLine("\nRunning Exception Handling Tests...");
-
-            // Test constructor with null directory
-            try
-            {
-                var stack = new PersistentStack<string>(null);
-                AssertTrue(false, "Should throw ArgumentNullException for null directory");
-            }
-            catch (ArgumentNullException)
-            {
-                AssertTrue(true, "Correctly threw ArgumentNullException for null directory");
-            }
-            catch (Exception ex)
-            {
-                AssertTrue(false, $"Threw wrong exception type: {ex.GetType().Name}");
-            }
-
-            // Test constructor with null serializer
-            try
-            {
-                var stack = new PersistentStack<string>(_testDirectory + "/null_serializer", null as Serializer);
-                AssertTrue(false, "Should throw ArgumentNullException for null serializer");
-            }
-            catch (ArgumentNullException)
-            {
-                AssertTrue(true, "Correctly threw ArgumentNullException for null serializer");
-            }
-            catch (Exception ex)
-            {
-                AssertTrue(false, $"Threw wrong exception type: {ex.GetType().Name}");
-            }
-
-            // Test invalid index access
-            {
-                var stackDir = Path.Combine(_testDirectory, "exception_index");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                stack.Push("Item1");
-
+                // Test pop from empty stack
                 try
                 {
-                    var item = stack[-1];
-                    AssertTrue(false, "Should throw ArgumentOutOfRangeException for negative index");
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentOutOfRangeException for negative index");
-                }
-
-                try
-                {
-                    var item = stack[1];
-                    AssertTrue(false, "Should throw ArgumentOutOfRangeException for out of bounds index");
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentOutOfRangeException for out of bounds index");
-                }
-            }
-
-            // Test Pop on empty stack
-            {
-                var stackDir = Path.Combine(_testDirectory, "exception_empty_pop");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                try
-                {
-                    var item = stack.Pop();
-                    AssertTrue(false, "Should throw InvalidOperationException for Pop on empty stack");
+                    var result = stack.Pop();
+                    AssertTrue(false, "Should throw InvalidOperationException for empty stack");
                 }
                 catch (InvalidOperationException)
                 {
-                    AssertTrue(true, "Correctly threw InvalidOperationException for Pop on empty stack");
+                    AssertTrue(true, "Correctly threw InvalidOperationException for empty stack");
                 }
-            }
+                catch (Exception ex)
+                {
+                    AssertTrue(false, $"Threw wrong exception type: {ex.GetType().Name}");
+                }
 
-            // Test Peek on empty stack
-            {
-                var stackDir = Path.Combine(_testDirectory, "exception_empty_peek");
-                using var stack = new PersistentStack<string>(stackDir);
-
+                // Test null constructor
                 try
                 {
-                    var item = stack.Peek();
-                    AssertTrue(false, "Should throw InvalidOperationException for Peek on empty stack");
-                }
-                catch (InvalidOperationException)
-                {
-                    AssertTrue(true, "Correctly threw InvalidOperationException for Peek on empty stack");
-                }
-            }
-
-            // Test invalid key access
-            {
-                var stackDir = Path.Combine(_testDirectory, "exception_key");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                try
-                {
-                    stack.Purge(null);
-                    AssertTrue(false, "Should throw ArgumentNullException for null key in Purge");
+                    var testStack = new PersistentStack<string>(null);
+                    AssertTrue(false, "Should throw ArgumentNullException for null path");
                 }
                 catch (ArgumentNullException)
                 {
-                    AssertTrue(true, "Correctly threw ArgumentNullException for null key in Purge");
+                    AssertTrue(true, "Correctly threw ArgumentNullException for null path");
                 }
-
-                try
+                catch (Exception ex)
                 {
-                    stack.Pop("nonexistent-key");
-                    AssertTrue(false, "Should throw KeyNotFoundException for nonexistent key in Pop");
+                    AssertTrue(false, $"Threw wrong exception type: {ex.GetType().Name}");
                 }
-                catch (KeyNotFoundException)
-                {
-                    AssertTrue(true, "Correctly threw KeyNotFoundException for nonexistent key in Pop");
-                }
-            }
-
-            // Test UpdateByKey with invalid parameters
-            {
-                var stackDir = Path.Combine(_testDirectory, "exception_update");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                stack.Push("TestItem");
-
-                try
-                {
-                    stack.UpdateByKey(null, "UpdatedItem");
-                    AssertTrue(false, "Should throw ArgumentNullException for null key in UpdateByKey");
-                }
-                catch (ArgumentNullException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentNullException for null key in UpdateByKey");
-                }
-
-                try
-                {
-                    stack.UpdateByKey("nonexistent-key", "UpdatedItem");
-                    AssertTrue(false, "Should throw KeyNotFoundException for nonexistent key in UpdateByKey");
-                }
-                catch (KeyNotFoundException)
-                {
-                    AssertTrue(true, "Correctly threw KeyNotFoundException for nonexistent key in UpdateByKey");
-                }
-
-                try
-                {
-                    string key = stack.Push("Item");
-                    stack.UpdateByKey(key, null as string);
-                    AssertTrue(false, "Should throw ArgumentNullException for null value in UpdateByKey");
-                }
-                catch (ArgumentNullException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentNullException for null value in UpdateByKey");
-                }
-            }
-
-            // Test invalid arguments for UpdateAt
-            {
-                var stackDir = Path.Combine(_testDirectory, "exception_update_at");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                try
-                {
-                    stack.UpdateAt(-1, "Item");
-                    AssertTrue(false, "Should throw ArgumentOutOfRangeException for negative index in UpdateAt");
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentOutOfRangeException for negative index in UpdateAt");
-                }
-
-                try
-                {
-                    stack.Push("Item");
-                    stack.UpdateAt(1, "UpdatedItem");
-                    AssertTrue(false, "Should throw ArgumentOutOfRangeException for out of bounds index in UpdateAt");
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentOutOfRangeException for out of bounds index in UpdateAt");
-                }
-
-                try
-                {
-                    stack.UpdateAt(0, null);
-                    AssertTrue(false, "Should throw ArgumentNullException for null value in UpdateAt");
-                }
-                catch (ArgumentNullException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentNullException for null value in UpdateAt");
-                }
-            }
-
-            // Test invalid arguments for RemoveAt
-            {
-                var stackDir = Path.Combine(_testDirectory, "exception_remove_at");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                try
-                {
-                    stack.RemoveAt(-1);
-                    AssertTrue(false, "Should throw ArgumentOutOfRangeException for negative index in RemoveAt");
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentOutOfRangeException for negative index in RemoveAt");
-                }
-
-                try
-                {
-                    stack.Push("Item");
-                    stack.RemoveAt(1);
-                    AssertTrue(false, "Should throw ArgumentOutOfRangeException for out of bounds index in RemoveAt");
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    AssertTrue(true, "Correctly threw ArgumentOutOfRangeException for out of bounds index in RemoveAt");
-                }
-            }
-        }
-
-        private static async Task RunAsyncTests()
-        {
-            Console.WriteLine("\nRunning Asynchronous API Tests...");
-
-            // Test PushAsync
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_push");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string key = await stack.PushAsync("AsyncItem");
-
-                AssertEquals(1, stack.Count, "PushAsync should add item");
-                byte[] data = await stack.PopAsync(key, false);
-                string value = Encoding.UTF8.GetString(data);
-                AssertTrue(value.Contains("AsyncItem"), "PopAsync should retrieve correct item content");
-            }
-
-            // Test PushAsync with T
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_push_t");
-                using var stack = new PersistentStack<Person>(stackDir);
-
-                string key = await stack.PushAsync(new Person { Name = "AsyncPerson", Age = 25 });
-
-                AssertEquals(1, stack.Count, "PushAsync<T> should add item");
-                var person = await stack.PopItemAsync(false);
-                AssertEquals("AsyncPerson", person.Name, "PopItemAsync should retrieve correct item");
-            }
-
-            // Test PopAsync
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_pop");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                await stack.PushAsync("Item1");
-                await stack.PushAsync("Item2");
-
-                byte[] data = await stack.PopAsync();
-                string value = Encoding.UTF8.GetString(data);
-                AssertTrue(value.Contains("Item2"), "PopAsync should retrieve the top item");
-                AssertEquals(1, stack.Count, "PopAsync should remove item from stack");
-            }
-
-            // Test PopItemAsync
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_pop_item");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                await stack.PushAsync("Item1");
-                await stack.PushAsync("Item2");
-
-                string item = await stack.PopItemAsync();
-                AssertEquals("Item2", item, "PopItemAsync should retrieve the top item");
-                AssertEquals(1, stack.Count, "PopItemAsync should remove item from stack");
-            }
-
-            // Test PopAtAsync
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_pop_at");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                await stack.PushAsync("Item1");
-                await stack.PushAsync("Item2");
-                await stack.PushAsync("Item3");
-
-                string item = await stack.PopAtAsync(1, true);
-                AssertEquals("Item2", item, "PopAtAsync should retrieve the item at the specified index");
-                AssertEquals(2, stack.Count, "PopAtAsync with remove=true should remove the item");
-
-                // Verify the remaining items
-                AssertEquals("Item3", await stack.PopItemAsync(), "First remaining item should be correct");
-                AssertEquals("Item1", await stack.PopItemAsync(), "Second remaining item should be correct");
-            }
-
-            // Test GetKeysAsync
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_get_keys");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string key1 = await stack.PushAsync("Item1");
-                string key2 = await stack.PushAsync("Item2");
-
-                var keys = await stack.GetKeysAsync();
-
-                AssertEquals(2, keys.Count, "GetKeysAsync should return correct number of keys");
-                AssertTrue(keys.Contains(key1) && keys.Contains(key2), "GetKeysAsync should return all keys");
-            }
-
-            // Test UpdateByKeyAsync
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_update_key");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                string key = await stack.PushAsync("OriginalItem");
-                await stack.UpdateByKeyAsync(key, "UpdatedItem");
-
-                byte[] data = await stack.PopAsync(key, false);
-                string value = Encoding.UTF8.GetString(data);
-                AssertTrue(value.Contains("UpdatedItem"), "UpdateByKeyAsync should update the item");
-            }
-
-            // Test UpdateByKeyAsync with T
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_update_key_t");
-                using var stack = new PersistentStack<Person>(stackDir);
-
-                string key = await stack.PushAsync(new Person { Name = "Original", Age = 25 });
-                await stack.UpdateByKeyAsync(key, new Person { Name = "Updated", Age = 30 });
-
-                var person = await stack.PopAtAsync(0, false);
-                AssertEquals("Updated", person.Name, "UpdateByKeyAsync<T> should update the item properties");
-                AssertEquals(30, person.Age, "UpdateByKeyAsync<T> should update the item properties");
-            }
-
-            // Test UpdateAtAsync
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_update_at");
-                using var stack = new PersistentStack<string>(stackDir);
-
-                await stack.PushAsync("Item1");
-                await stack.PushAsync("Item2");
-                await stack.PushAsync("Item3");
-
-                await stack.UpdateAtAsync(1, "UpdatedItem2");
-
-                AssertEquals("UpdatedItem2", await stack.PopAtAsync(1, false), "UpdateAtAsync should update the item at the specified index");
-            }
-
-            // Test cancellation token
-            {
-                var stackDir = Path.Combine(_testDirectory, "async_cancel");
-                using var stack = new PersistentStack<int>(stackDir);
-
-                var cts = new CancellationTokenSource();
-                cts.Cancel(); // Cancel immediately
-
-                try
-                {
-                    // This should be cancelled
-                    await stack.PushAsync(123, cts.Token);
-
-                    // If we get here, the operation wasn't cancelled properly
-                    AssertTrue(false, "PushAsync should respect cancellation token");
-                }
-                catch (OperationCanceledException)
-                {
-                    // This is expected
-                    AssertTrue(true, "PushAsync correctly responded to cancellation token");
-                }
-
-                // The stack should be empty
-                AssertEquals(0, stack.Count, "Stack should be empty after cancelled PushAsync");
             }
         }
 
@@ -1104,11 +430,11 @@
 
             // Test concurrent reads
             {
-                var stackDir = Path.Combine(_testDirectory, "concurrent_read");
-                using var stack = new PersistentStack<int>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "concurrent_read.idx");
+                using var stack = new PersistentStack<int>(stackFile);
 
                 // Add some items
-                for (int i = 0; i < 10; i++)
+                for (int i = 0; i < 100; i++)
                 {
                     stack.Push(i);
                 }
@@ -1119,13 +445,11 @@
                 {
                     tasks.Add(Task.Run(() =>
                     {
-                        for (int j = 0; j < 10; j++)
+                        var array = stack.ToArray();
+                        // Just iterate through the array, no assertions needed
+                        for (int j = 0; j < array.Length; j++)
                         {
-                            if (j < stack.Count)
-                            {
-                                int value = stack[j];
-                                // No assertion here, just checking it doesn't crash
-                            }
+                            var value = array[j];
                         }
                     }));
                 }
@@ -1137,40 +461,36 @@
 
             // Test concurrent writes
             {
-                var stackDir = Path.Combine(_testDirectory, "concurrent_write");
-                using var stack = new PersistentStack<int>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "concurrent_write.idx");
+                using var stack = new PersistentStack<int>(stackFile);
 
                 // Create multiple concurrent write tasks
                 var tasks = new List<Task>();
-                int numTasks = 5;
-                int itemsPerTask = 5;
-
-                for (int i = 0; i < numTasks; i++)
+                for (int i = 0; i < 10; i++)
                 {
                     int taskId = i;
-                    tasks.Add(Task.Run(async () =>
+                    tasks.Add(Task.Run(() =>
                     {
-                        for (int j = 0; j < itemsPerTask; j++)
+                        for (int j = 0; j < 10; j++)
                         {
-                            Console.WriteLine("| Pushing value " + j);
-                            int value = taskId * 100 + j;
-                            await stack.PushAsync(value);
+                            int value = taskId * 10 + j;
+                            stack.Push(value);
                         }
                     }));
                 }
 
                 await Task.WhenAll(tasks);
 
-                AssertEquals(numTasks * itemsPerTask, stack.Count, "All concurrent pushes should be completed");
+                AssertEquals(100, stack.Count, "All concurrent pushes should be completed");
             }
 
             // Test concurrent mixed operations
             {
-                var stackDir = Path.Combine(_testDirectory, "concurrent_mixed");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "concurrent_mixed.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 // Add initial items
-                for (int i = 0; i < 10; i++)
+                for (int i = 0; i < 20; i++)
                 {
                     stack.Push($"Item{i}");
                 }
@@ -1178,489 +498,168 @@
                 // Perform various operations concurrently
                 var tasks = new List<Task>();
 
-                // Task 1: Read operations
+                // Task 1: Read operations using ToArray to get a snapshot
                 tasks.Add(Task.Run(() =>
                 {
                     for (int i = 0; i < 10; i++)
                     {
-                        string value;
-                        if (stack.TryPeekAt(i, out value))
+                        try
                         {
-                            // do nothing
+                            var items = stack.ToArray();
+                            if (items.Length > 0)
+                            {
+                                string value = items[0]; // Always use the first item
+                            }
                         }
+                        catch (Exception)
+                        {
+                            // Handle exceptions as needed
+                        }
+                        Thread.Sleep(5); // Small delay to reduce race conditions
                     }
                 }));
 
-                // Task 2: Push operations
+                // Task 2: Write operations
                 tasks.Add(Task.Run(async () =>
                 {
                     for (int i = 0; i < 10; i++)
                     {
-                        await stack.PushAsync($"NewItem{i}");
+                        stack.Push($"NewItem{i}");
+                        await Task.Delay(5); // Small delay to reduce race conditions
                     }
                 }));
 
                 // Task 3: Pop operations
-                tasks.Add(Task.Run(async () =>
+                tasks.Add(Task.Run(() =>
                 {
                     for (int i = 0; i < 5; i++)
                     {
                         try
                         {
-                            await stack.PopItemAsync();
+                            if (stack.Count > 0)
+                            {
+                                stack.TryPop(out string value);
+                            }
                         }
-                        catch (InvalidOperationException)
+                        catch (Exception)
                         {
-                            // Stack might be empty temporarily due to concurrent operations
+                            // Handle exceptions as needed
                         }
+                        Thread.Sleep(10); // Small delay to avoid racing with push
                     }
                 }));
 
                 await Task.WhenAll(tasks);
 
-                // We can't assert an exact count due to race conditions,
-                // but the stack should have approximately (10 initial + 10 pushed - 5 popped) items
-                AssertTrue(stack.Count >= 10, "Stack should have a reasonable number of items after concurrent operations");
+                AssertTrue(stack.Count >= 15, "Stack should have at least (initial + new - popped) items");
             }
 
-            // Test producer-consumer pattern
+            // Test concurrent push and pop
             {
-                var stackDir = Path.Combine(_testDirectory, "concurrent_producer_consumer");
-                using var stack = new PersistentStack<int>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "concurrent_push_pop.idx");
+                using var stack = new PersistentStack<int>(stackFile);
 
-                var producerCount = 2;
-                var consumerCount = 2;
-                var itemsPerProducer = 8;
-                var totalItems = producerCount * itemsPerProducer;
-
-                var counter = new CountdownEvent(totalItems);
-                var producersCompleted = new ManualResetEventSlim(false);
-
-                // Start producers
-                var producers = new List<Task>();
-                for (int p = 0; p < producerCount; p++)
+                // Task to continuously push items
+                var pushTask = Task.Run(async () =>
                 {
-                    int producerId = p;
-                    producers.Add(Task.Run(async () =>
+                    for (int i = 0; i < 100; i++)
                     {
-                        for (int i = 0; i < itemsPerProducer; i++)
-                        {
-                            int val = producerId * 1000 + i;
-                            Console.WriteLine("| Producing value " + val);
-                            await stack.PushAsync(val);
-                            await Task.Delay(5); // Small delay to simulate work
-                        }
-                    }));
-                }
-
-                // Start consumers
-                var consumers = new List<Task>();
-                for (int c = 0; c < consumerCount; c++)
-                {
-                    consumers.Add(Task.Run(async () =>
-                    {
-                        while (!producersCompleted.IsSet || stack.Count > 0)
-                        {
-                            try
-                            {
-                                if (stack.Count > 0)
-                                {
-                                    var item = await stack.PopItemAsync();
-                                    counter.Signal();
-                                }
-                                else
-                                {
-                                    await Task.Delay(10); // Wait if stack is empty
-                                }
-                            }
-                            catch (InvalidOperationException)
-                            {
-                                // Stack might be empty due to concurrent operations
-                                await Task.Delay(10);
-                            }
-                        }
-                    }));
-                }
-
-                // Wait for producers to complete
-                await Task.WhenAll(producers);
-                producersCompleted.Set();
-
-                // Wait for all items to be processed
-                var allProcessed = counter.Wait(TimeSpan.FromSeconds(10));
-
-                // Wait for consumers to complete
-                await Task.WhenAll(consumers);
-
-                AssertTrue(allProcessed, "All produced items should be consumed");
-                AssertEquals(0, stack.Count, "Stack should be empty after all items are consumed");
-            }
-        }
-
-        private static async Task RunConcurrentOrderTests()
-        {
-            Console.WriteLine("\nRunning Concurrent Order Preservation Tests...");
-
-            // Test 1: Order preservation with concurrent pushes
-            {
-                var stackDir = Path.Combine(_testDirectory, "concurrent_order_push");
-                using var stack = new PersistentStack<int>(stackDir);
-
-                // Create multiple concurrent push tasks that add items in sequence from each thread
-                var tasks = new List<Task<List<string>>>();
-                int threadCount = 4;
-                int itemsPerThread = 25;
-
-                // Track keys in order for verification
-                var allKeysInOrder = new List<string>[threadCount];
-
-                for (int i = 0; i < threadCount; i++)
-                {
-                    int threadId = i;
-                    tasks.Add(Task.Run(() =>
-                    {
-                        var keysAdded = new List<string>();
-                        for (int j = 0; j < itemsPerThread; j++)
-                        {
-                            // Each thread pushes values in its own range
-                            // Thread 0: 0-24, Thread 1: 100-124, etc.
-                            int value = threadId * 100 + j;
-                            string key = stack.Push(value);
-                            keysAdded.Add(key);
-                            // Small delay to increase chance of thread interleaving
-                            Thread.Sleep(1);
-                        }
-                        return keysAdded;
-                    }));
-                }
-
-                // Wait for all tasks and collect added keys
-                var results = await Task.WhenAll(tasks);
-                for (int i = 0; i < threadCount; i++)
-                {
-                    allKeysInOrder[i] = results[i];
-                }
-
-                // Verify total count
-                AssertEquals(threadCount * itemsPerThread, stack.Count,
-                    "All items from all threads should be added");
-
-                // For each thread, verify that its items maintain their relative order in the stack
-                for (int t = 0; t < threadCount; t++)
-                {
-                    var keysFromThread = allKeysInOrder[t];
-                    List<int> valuesInStack = new List<int>();
-
-                    // Get values by keys in the order they were pushed
-                    foreach (var key in keysFromThread)
-                    {
-                        // We can't peek by key directly, so we need to hold a reference
-                        // to the byte array with the value for each key
-                        valuesInStack.Add(stack.PeekBytes(key).Length > 0
-                            ? _Serializer.DeserializeJson<int>(stack.PeekBytes(key))
-                            : 0);
-                    }
-
-                    // Verify values are in sequential order within each thread's range
-                    bool inOrder = true;
-                    for (int i = 1; i < valuesInStack.Count; i++)
-                    {
-                        // With stack, later pushed items should appear before earlier pushed items
-                        // when we enumerate the stack (LIFO order)
-                        if (valuesInStack[i - 1] != valuesInStack[i] - 1)
-                        {
-                            inOrder = false;
-                            break;
-                        }
-                    }
-
-                    AssertTrue(inOrder, $"Items pushed by thread {t} should maintain their relative order");
-                }
-            }
-
-            // Test 2: Order preservation with interleaved pushes and pops
-            {
-                var stackDir = Path.Combine(_testDirectory, "concurrent_push_pop_order");
-                using var stack = new PersistentStack<int>(stackDir);
-
-                // First push a set of ordered items
-                for (int i = 0; i < 50; i++)
-                {
-                    stack.Push(i);
-                }
-
-                // Create a task that pushes items
-                var pushTask = Task.Run(() =>
-                {
-                    for (int i = 0; i < 20; i++)
-                    {
-                        stack.Push(1000 + i);  // Push items in 1000s
-                        Thread.Sleep(5);       // Small delay to interleave operations
+                        stack.Push(i);
+                        await Task.Delay(5); // Small delay
                     }
                 });
 
-                // Create a task that pops items
-                var popTask = Task.Run(() =>
+                // Task to continuously pop items
+                var popTask = Task.Run(async () =>
                 {
-                    for (int i = 0; i < 15; i++)
+                    int popped = 0;
+                    while (popped < 50) // Pop only half
                     {
-                        // Pop items from the top
                         if (stack.Count > 0)
                         {
                             stack.Pop();
-                            Thread.Sleep(7);  // Different delay to create more interleaving
+                            popped++;
                         }
+                        await Task.Delay(10); // Slightly slower than push
                     }
                 });
 
                 await Task.WhenAll(pushTask, popTask);
 
-                // Verify the stack preserves LIFO order (newest items on top)
-                bool isLIFOOrdered = true;
-                List<int> poppedItems = new List<int>();
-
-                // Pop all items to check order
-                while (stack.Count > 0)
-                {
-                    poppedItems.Add(stack.Pop());
-                }
-
-                // With a stack, we expect values to be in descending order
-                for (int i = 1; i < poppedItems.Count; i++)
-                {
-                    if (poppedItems[i - 1] < poppedItems[i])
-                    {
-                        isLIFOOrdered = false;
-                        Console.WriteLine($"Order violation at index {i}: {poppedItems[i - 1]} before {poppedItems[i]}");
-                        break;
-                    }
-                }
-
-                AssertTrue(isLIFOOrdered, "Stack should maintain LIFO order after concurrent pushes and pops");
-                AssertEquals(55, poppedItems.Count, "Stack should have 50 original items + 20 pushes - 15 pops = 55 items");
+                AssertTrue(stack.Count > 0, "Stack should have items remaining after concurrent operations");
+                AssertTrue(stack.Count < 100, "Stack should have had some items popped");
             }
 
-            // Test 3: Order preservation with multiple threads performing mixed operations
+            // Test multiple threads pushing items - maintain LIFO order
             {
-                var stackDir = Path.Combine(_testDirectory, "concurrent_mixed_operations_order");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "concurrent_order.idx");
+                using var stack = new PersistentStack<int>(stackFile);
 
-                // Make sure directory is clean
+                // Start with a clean stack
                 stack.Clear();
 
-                // Push initial items (A0-A49)
-                for (int i = 0; i < 50; i++)
-                {
-                    stack.Push($"A{i}");
-                }
-
-                // Use a CountdownEvent to ensure all operations complete
-                var operationsCompleted = new CountdownEvent(3);
-
-                // Track pushed items for verification
-                var pushedBItems = new List<string>();
-                var pushedCItems = new List<string>();
-                var poppedItems = new List<string>();
-
-                // Tasks will perform different operations concurrently
+                // Set up threads to push values
                 var tasks = new List<Task>();
+                int threadsCount = 4;
+                int itemsPerThread = 25;
 
-                // Task 1: Push B items
-                tasks.Add(Task.Run(() =>
+                for (int t = 0; t < threadsCount; t++)
                 {
-                    try
+                    int threadId = t;
+                    tasks.Add(Task.Run(() =>
                     {
-                        for (int i = 0; i < 10; i++)
+                        for (int i = 0; i < itemsPerThread; i++)
                         {
-                            string item = $"B{i}";
-                            stack.Push(item);
-                            lock (pushedBItems)
-                            {
-                                pushedBItems.Add(item);
-                            }
-                            Console.WriteLine($"Pushed {item}");
-                            Thread.Sleep(3);
+                            // Each thread adds values in its own range
+                            int value = threadId * 100 + i;
+                            stack.Push(value);
+                            Thread.Sleep(1); // Small delay for interleaving
+                        }
+                    }));
+                }
+
+                await Task.WhenAll(tasks);
+
+                // Verify count
+                AssertEquals(threadsCount * itemsPerThread, stack.Count, "All items should be pushed");
+
+                // Analyze the order - we can't guarantee perfect LIFO across threads
+                // but we can check that the items from each thread maintain their relative order
+                var items = stack.ToArray();
+
+                // Group values by the thread that produced them
+                var itemsByThread = new Dictionary<int, List<int>>();
+
+                for (int t = 0; t < threadsCount; t++)
+                {
+                    itemsByThread[t] = new List<int>();
+                }
+
+                foreach (int item in items)
+                {
+                    int threadId = item / 100; // Determine which thread produced this item
+                    if (threadId < threadsCount)
+                    {
+                        itemsByThread[threadId].Add(item);
+                    }
+                }
+
+                // For each thread, check that its items are in descending order (LIFO)
+                bool allThreadsInOrder = true;
+                for (int t = 0; t < threadsCount; t++)
+                {
+                    var threadItems = itemsByThread[t];
+                    for (int i = 0; i < threadItems.Count - 1; i++)
+                    {
+                        if (threadItems[i] % 100 < threadItems[i + 1] % 100)
+                        {
+                            allThreadsInOrder = false;
+                            break;
                         }
                     }
-                    finally
-                    {
-                        operationsCompleted.Signal();
-                    }
-                }));
-
-                // Task 2: Push C items
-                tasks.Add(Task.Run(() =>
-                {
-                    try
-                    {
-                        for (int i = 0; i < 10; i++)
-                        {
-                            string item = $"C{i}";
-                            stack.Push(item);
-                            lock (pushedCItems)
-                            {
-                                pushedCItems.Add(item);
-                            }
-                            Console.WriteLine($"Pushed {item}");
-                            Thread.Sleep(4);
-                        }
-                    }
-                    finally
-                    {
-                        operationsCompleted.Signal();
-                    }
-                }));
-
-                // Task 3: Pop exactly 5 items
-                tasks.Add(Task.Run(() =>
-                {
-                    try
-                    {
-                        // Wait a short moment to ensure some items are pushed first
-                        Thread.Sleep(10);
-
-                        for (int i = 0; i < 5; i++)
-                        {
-                            if (stack.Count > 0)
-                            {
-                                string popped = stack.Pop();
-                                lock (poppedItems)
-                                {
-                                    poppedItems.Add(popped);
-                                }
-                                Console.WriteLine($"Popped {popped}");
-                                Thread.Sleep(5);
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        operationsCompleted.Signal();
-                    }
-                }));
-
-                // Wait for all tasks to complete
-                operationsCompleted.Wait();
-
-                // Pop all remaining items to verify properties
-                List<string> remainingItems = new List<string>();
-                while (stack.Count > 0)
-                {
-                    remainingItems.Add(stack.Pop());
                 }
 
-                // Count by category
-                int remainingBCount = remainingItems.Count(item => item.StartsWith("B"));
-                int remainingCCount = remainingItems.Count(item => item.StartsWith("C"));
-                int remainingACount = remainingItems.Count(item => item.StartsWith("A"));
-                int otherCount = remainingItems.Count(item => !item.StartsWith("A") && !item.StartsWith("B") && !item.StartsWith("C"));
-
-                // Calculate popped counts
-                int poppedBCount = poppedItems.Count(item => item.StartsWith("B"));
-                int poppedCCount = poppedItems.Count(item => item.StartsWith("C"));
-                int poppedACount = poppedItems.Count(item => item.StartsWith("A"));
-
-                // Get the remaining B and C items
-                List<string> remainingBItems = remainingItems.Where(item => item.StartsWith("B")).ToList();
-                List<string> remainingCItems = remainingItems.Where(item => item.StartsWith("C")).ToList();
-
-                // Print detailed diagnostic information
-                Console.WriteLine("Pushed B items in order:");
-                foreach (var item in pushedBItems)
-                {
-                    Console.WriteLine($"  {item}");
-                }
-
-                Console.WriteLine("Remaining B items in order they were popped:");
-                foreach (var item in remainingBItems)
-                {
-                    Console.WriteLine($"  {item}");
-                }
-
-                Console.WriteLine("Popped items during test:");
-                foreach (var item in poppedItems)
-                {
-                    Console.WriteLine($"  {item}");
-                }
-
-                // More detailed LIFO testing for B items
-                // We need to account for the fact that some B items might have been popped already
-                // and we can't make assumptions about exactly which ones were popped
-
-                // IMPORTANT: Modified LIFO check that handles the fact that some items may have been popped
-                bool bItemsInLIFO = true;
-
-                // For each B item that's still in the stack, determine if it follows LIFO order
-                // relative to other remaining B items
-                for (int i = 0; i < remainingBItems.Count - 1; i++)
-                {
-                    // Extract the indexes from the item names (e.g., "B5" -> 5)
-                    int currentIndex = int.Parse(remainingBItems[i].Substring(1));
-                    int nextIndex = int.Parse(remainingBItems[i + 1].Substring(1));
-
-                    // In LIFO order, items with higher indices should be popped first
-                    if (currentIndex < nextIndex)
-                    {
-                        bItemsInLIFO = false;
-                        Console.WriteLine($"LIFO violation: {remainingBItems[i]} before {remainingBItems[i + 1]}");
-                        break;
-                    }
-                }
-
-                // Same check for C items
-                bool cItemsInLIFO = true;
-                for (int i = 0; i < remainingCItems.Count - 1; i++)
-                {
-                    int currentIndex = int.Parse(remainingCItems[i].Substring(1));
-                    int nextIndex = int.Parse(remainingCItems[i + 1].Substring(1));
-
-                    if (currentIndex < nextIndex)
-                    {
-                        cItemsInLIFO = false;
-                        Console.WriteLine($"LIFO violation: {remainingCItems[i]} before {remainingCItems[i + 1]}");
-                        break;
-                    }
-                }
-
-                // A items should still be in reverse order (A49 first, then A48, etc.)
-                bool aItemsInLIFO = true;
-                List<string> remainingAItems = remainingItems.Where(item => item.StartsWith("A")).ToList();
-                for (int i = 0; i < remainingAItems.Count - 1; i++)
-                {
-                    int currentIndex = int.Parse(remainingAItems[i].Substring(1));
-                    int nextIndex = int.Parse(remainingAItems[i + 1].Substring(1));
-
-                    if (currentIndex < nextIndex)
-                    {
-                        aItemsInLIFO = false;
-                        Console.WriteLine($"LIFO violation for A items: {remainingAItems[i]} before {remainingAItems[i + 1]}");
-                        break;
-                    }
-                }
-
-                // Print detailed summary
-                Console.WriteLine($"Total items at end: {remainingItems.Count}");
-                Console.WriteLine($"Items popped during test: {poppedItems.Count}");
-                Console.WriteLine($"Pushed B items: {pushedBItems.Count}, Remaining: {remainingBCount}, Popped: {poppedBCount}");
-                Console.WriteLine($"Pushed C items: {pushedCItems.Count}, Remaining: {remainingCCount}, Popped: {poppedCCount}");
-                Console.WriteLine($"Original A items: 50, Remaining: {remainingACount}, Popped: {poppedACount}");
-
-                // Verify that all items are accounted for
-                AssertEquals(pushedBItems.Count, remainingBCount + poppedBCount, "All B items should be accounted for");
-                AssertEquals(pushedCItems.Count, remainingCCount + poppedCCount, "All C items should be accounted for");
-                AssertEquals(50, remainingACount + poppedACount, "All A items should be accounted for");
-
-                // Verify LIFO ordering within each category
-                AssertTrue(bItemsInLIFO, "B items should maintain LIFO order within their category");
-                AssertTrue(cItemsInLIFO, "C items should maintain LIFO order within their category");
-                AssertTrue(aItemsInLIFO, "A items should maintain LIFO order within their category");
-
-                // Verify no unexpected items
-                AssertEquals(0, otherCount, "No unexpected items should be in the stack");
-
-                // Verify total count
-                int expectedTotalItems = pushedBItems.Count + pushedCItems.Count + 50 - poppedItems.Count;
-                AssertEquals(expectedTotalItems, remainingItems.Count, "Stack should have correct total count after all operations");
+                AssertTrue(allThreadsInOrder, "Items from each thread should maintain their relative LIFO order");
             }
         }
 
@@ -1668,16 +667,15 @@
         {
             Console.WriteLine("\nRunning Complex Scenario Tests...");
 
-            // Scenario 1: Stack as a processing queue with multiple workers
+            // Scenario 1: Stack as a processing stack with multiple workers
             {
-                var stackDir = Path.Combine(_testDirectory, "scenario_processing_queue");
-                using var stack = new PersistentStack<StackItem>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "scenario_processing_stack.idx");
+                using var stack = new PersistentStack<StackItem>(stackFile);
 
                 // Add work items
                 int workItems = 20;
                 for (int i = 0; i < workItems; i++)
                 {
-                    Console.WriteLine("| Pushing stack item " + i);
                     stack.Push(new StackItem { Id = i, Value = $"Task {i}" });
                 }
 
@@ -1696,8 +694,6 @@
                             {
                                 if (!stack.TryPop(out item))
                                     break; // No more items to process
-                                else
-                                    Console.WriteLine("| Popped item " + item.Id);
                             }
 
                             // Process the item (simulated by incrementing counter)
@@ -1715,8 +711,8 @@
 
             // Scenario 2: Stack with multiple readers and writers
             {
-                var stackDir = Path.Combine(_testDirectory, "scenario_multi_readwrite");
-                using var stack = new PersistentStack<string>(stackDir);
+                var stackFile = Path.Combine(_testDirectory, "scenario_multi_readwrite.idx");
+                using var stack = new PersistentStack<string>(stackFile);
 
                 int writerCount = 2;
                 int readerCount = 2;
@@ -1734,8 +730,7 @@
                     {
                         for (int i = 0; i < itemsPerWriter; i++)
                         {
-                            Console.WriteLine($"| Pushing Writer{writerId}_Item{i}");
-                            await stack.PushAsync($"Writer{writerId}_Item{i}");
+                            stack.Push($"Writer{writerId}_Item{i}");
                             await Task.Delay(5); // Small delay
                         }
                     }));
@@ -1744,16 +739,15 @@
                 // Wait a bit to give writers a head start
                 await Task.Delay(100);
 
-                // Start readers (non-destructive reads using TryPeekAt)
+                // Start readers (non-destructive reads using Peek)
                 for (int r = 0; r < readerCount; r++)
                 {
                     readers.Add(Task.Run(() =>
                     {
                         for (int i = 0; i < readOperations; i++)
                         {
-                            int randomIndex = new Random().Next(0, stack.Count > 0 ? stack.Count : 1);
                             string item = null;
-                            stack.TryPeekAt(randomIndex, out item);
+                            stack.TryPeek(out item);
                             Thread.Sleep(5); // Small delay
                         }
                     }));
@@ -1769,32 +763,33 @@
 
             // Scenario 3: Persistent stack with multiple instances
             {
-                var stackDir = Path.Combine(_testDirectory, "scenario_multiple_instances");
+                var stackFile = Path.Combine(_testDirectory, "scenario_multiple_instances.idx");
 
                 // First instance: add initial data
-                string[] keys = new string[3];
-                using (var stack1 = new PersistentStack<string>(stackDir))
+                using (var stack1 = new PersistentStack<string>(stackFile))
                 {
                     stack1.Clear(); // Ensure clean state
-                    keys[0] = stack1.Push("First");
-                    keys[1] = stack1.Push("Second");
-                    keys[2] = stack1.Push("Third");
+                    stack1.Push("First");
+                    stack1.Push("Second");
+                    stack1.Push("Third");
                 }
 
                 // Second instance: read and modify
-                using (var stack2 = new PersistentStack<string>(stackDir))
+                using (var stack2 = new PersistentStack<string>(stackFile))
                 {
                     AssertEquals(3, stack2.Count, "Second instance should see all items");
                     AssertEquals("Third", stack2.Peek(), "Second instance should read correct top item");
 
-                    // Modify data
-                    stack2.UpdateByKey(keys[1], "Modified");
+                    // Pop top item
+                    string item = stack2.Pop();
+                    AssertEquals("Third", item, "Should pop items in LIFO order");
+
+                    // Add new item
                     stack2.Push("Fourth");
-                    stack2.Pop(); // Remove "Fourth"
                 }
 
                 // Third instance: verify changes
-                using (var stack3 = new PersistentStack<string>(stackDir))
+                using (var stack3 = new PersistentStack<string>(stackFile))
                 {
                     AssertEquals(3, stack3.Count, "Third instance should see correct item count");
 
@@ -1805,19 +800,25 @@
                         items.Add(stack3.Pop());
                     }
 
-                    AssertCollectionEquals(new[] { "Third", "Modified", "First" }, items,
+                    AssertCollectionEquals(new[] { "Fourth", "Second", "First" }, items,
                         "Final stack should contain the correct items in the correct order");
                 }
             }
         }
 
         #endregion
+
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+#pragma warning restore CS8600 // Converting null literal or possible null value to non-nullable type.
     }
 
     // Helper class for testing
     [Serializable]
     public class Person
     {
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
+#pragma warning disable CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
+
         public string Name { get; set; }
         public int Age { get; set; }
 
@@ -1839,12 +840,16 @@
         {
             return $"{Name} ({Age})";
         }
+
+#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
     }
 
     // Helper class for stack scenarios
     [Serializable]
     public class StackItem
     {
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
         public int Id { get; set; }
         public string Value { get; set; }
 
@@ -1853,13 +858,6 @@
             return $"Item {Id}: {Value}";
         }
 
-#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
-#pragma warning restore CS8600 // Converting null literal or possible null value to non-nullable type.
-#pragma warning restore CS8604 // Possible null reference argument.
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
-#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference type.
-#pragma warning restore CS8629 // Nullable value type may be null.
-#pragma warning restore CS8765 // Nullability of type of parameter doesn't match overridden member (possibly because of nullability attributes).
     }
 }

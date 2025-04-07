@@ -9,13 +9,14 @@
     public static class Program
     {
         private static bool _RunForever = true;
-        private static PersistentQueue<string> _Queue = new PersistentQueue<string>("./temp/", true);
+        private static PersistentQueue<string> _Queue = new PersistentQueue<string>("./temp/queue.idx");
 
         public static void Main(string[] args)
         {
-            _Queue.DataEnqueued += (s, key) => Console.WriteLine("Data enqueued: " + key);
-            _Queue.DataDequeued += (s, key) => Console.WriteLine("Data dequeued: " + key);
-            _Queue.Cleared += (s, _) => Console.WriteLine("Queue cleared");
+            Console.WriteLine("PersistentQueue Test Application");
+            Console.WriteLine("Queue file: ./temp/queue.idx");
+            Console.WriteLine("Type '?' for help menu");
+            Console.WriteLine();
 
             while (_RunForever)
             {
@@ -28,6 +29,7 @@
                         break;
 
                     case "?":
+                    case "help":
                         Menu();
                         break;
 
@@ -43,52 +45,41 @@
                         Dequeue();
                         break;
 
-                    case "dequeuebykey":
-                        DequeueByKey();
-                        break;
-
-                    case "dequeueat":
-                        DequeueAt();
-                        break;
-
                     case "peek":
                         Peek();
                         break;
 
-                    case "peekat":
-                        PeekAt();
-                        break;
-
-                    case "getbyindex":
-                        GetByIndex();
-                        break;
-
                     case "count":
-                        Console.WriteLine(_Queue.Count);
+                        Console.WriteLine($"Count: {_Queue.Count}");
                         break;
 
-                    case "length":
-                        Console.WriteLine(_Queue.Length + " bytes");
+                    case "trydequeue":
+                        TryDequeue();
                         break;
 
-                    case "remove":
-                        Remove();
+                    case "trypeek":
+                        TryPeek();
                         break;
 
-                    case "removeat":
-                        RemoveAt();
+                    case "contains":
+                        Contains();
                         break;
 
                     case "enumerate":
                         Enumerate();
                         break;
 
-                    case "keys":
-                        ListKeys();
+                    case "toarray":
+                        ToArray();
                         break;
 
                     case "clear":
                         _Queue.Clear();
+                        Console.WriteLine("Queue cleared");
+                        break;
+
+                    default:
+                        Console.WriteLine("Unknown command. Type '?' for help.");
                         break;
                 }
             }
@@ -105,19 +96,13 @@
             Console.WriteLine("   cls             clear the screen");
             Console.WriteLine("   enqueue         add to the queue");
             Console.WriteLine("   dequeue         read and remove oldest item from the queue");
-            Console.WriteLine("   dequeuebykey    read and remove item with specific key from the queue");
-            Console.WriteLine("   dequeueat       read and remove item at specific index from the queue");
             Console.WriteLine("   peek            read oldest item without removing");
-            Console.WriteLine("   peekat          read item at specific index without removing");
-            Console.WriteLine("   getbyindex      read item at specific index (same as peekat)");
             Console.WriteLine("   count           show the queue count");
-            Console.WriteLine("   length          show the queue length in bytes");
-            Console.WriteLine("   remove          remove record from queue by key");
-            Console.WriteLine("   removeat        remove record from queue by index");
-            Console.WriteLine("   expire          expire a record and remove it from the queue");
-            Console.WriteLine("   getexp          retrieve the expiration for a given record");
+            Console.WriteLine("   trydequeue      try to dequeue an item");
+            Console.WriteLine("   trypeek         try to peek at the next item");
+            Console.WriteLine("   contains        check if an item exists in the queue");
             Console.WriteLine("   enumerate       list all items in the queue");
-            Console.WriteLine("   keys            list all keys in the queue");
+            Console.WriteLine("   toarray         convert queue to array and display items");
             Console.WriteLine("   clear           empty the queue");
             Console.WriteLine("");
         }
@@ -127,144 +112,75 @@
             string data = Inputty.GetString("Data:", null, true);
             if (String.IsNullOrEmpty(data)) return;
 
-            string key = _Queue.Enqueue(data);
-            Console.WriteLine("Key: " + key);
+            _Queue.Enqueue(data);
+            Console.WriteLine("Item enqueued successfully");
         }
 
         private static void Dequeue()
         {
-            string msg = _Queue.Dequeue();
-            if (String.IsNullOrEmpty(msg))
+            try
+            {
+                string msg = _Queue.Dequeue();
+                Console.WriteLine($"Dequeued: {msg}");
+            }
+            catch (InvalidOperationException)
             {
                 Console.WriteLine("Queue is empty");
-                return;
-            }
-            Console.WriteLine(msg);
-        }
-
-        private static void DequeueByKey()
-        {
-            string key = Inputty.GetString("Key:", null, true);
-            if (String.IsNullOrEmpty(key)) return;
-
-            try
-            {
-                string msg = _Queue.Dequeue(key, true);
-                if (String.IsNullOrEmpty(msg))
-                {
-                    Console.WriteLine("No data found for key");
-                    return;
-                }
-                Console.WriteLine(msg);
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-        }
-
-        private static void DequeueAt()
-        {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
-            {
-                string msg = _Queue.DequeueAt(index, true);
-                if (String.IsNullOrEmpty(msg))
-                {
-                    Console.WriteLine("No data found at index");
-                    return;
-                }
-                Console.WriteLine(msg);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
+                Console.WriteLine($"Error: {ex.Message}");
             }
         }
 
         private static void Peek()
         {
-            string msg = _Queue.Peek();
-            if (String.IsNullOrEmpty(msg))
+            try
+            {
+                string msg = _Queue.Peek();
+                Console.WriteLine($"Peek: {msg}");
+            }
+            catch (InvalidOperationException)
             {
                 Console.WriteLine("Queue is empty");
-                return;
-            }
-            Console.WriteLine(msg);
-        }
-
-        private static void PeekAt()
-        {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
-            {
-                string msg = _Queue.PeekAt(index);
-                if (String.IsNullOrEmpty(msg))
-                {
-                    Console.WriteLine("No data found at index");
-                    return;
-                }
-                Console.WriteLine(msg);
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error: " + ex.Message);
+                Console.WriteLine($"Error: {ex.Message}");
             }
         }
 
-        private static void GetByIndex()
+        private static void TryDequeue()
         {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
+            if (_Queue.TryDequeue(out string result))
             {
-                string msg = _Queue[index];
-                if (String.IsNullOrEmpty(msg))
-                {
-                    Console.WriteLine("No data found at index");
-                    return;
-                }
-                Console.WriteLine(msg);
+                Console.WriteLine($"Dequeued: {result}");
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine("Error: " + ex.Message);
+                Console.WriteLine("Queue is empty");
             }
         }
 
-        private static void Remove()
+        private static void TryPeek()
         {
-            string key = Inputty.GetString("Key:", null, true);
-            if (String.IsNullOrEmpty(key)) return;
-
-            try
+            if (_Queue.TryPeek(out string result))
             {
-                _Queue.Remove(key);
+                Console.WriteLine($"Peek: {result}");
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine("Error: " + ex.Message);
+                Console.WriteLine("Queue is empty");
             }
         }
 
-        private static void RemoveAt()
+        private static void Contains()
         {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
+            string data = Inputty.GetString("Data to check:", null, true);
+            if (String.IsNullOrEmpty(data)) return;
 
-            try
-            {
-                _Queue.RemoveAt(index);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
+            bool contains = _Queue.Contains(data);
+            Console.WriteLine($"Queue {(contains ? "contains" : "does not contain")} '{data}'");
         }
 
         private static void Enumerate()
@@ -289,23 +205,22 @@
             Console.WriteLine("");
         }
 
-        private static void ListKeys()
+        private static void ToArray()
         {
-            List<string> keys = _Queue.GetKeys();
+            Console.WriteLine("");
 
-            if (keys.Count == 0)
+            if (_Queue.Count == 0)
             {
                 Console.WriteLine("Queue is empty");
                 return;
             }
 
-            Console.WriteLine("");
-            Console.WriteLine($"Listing {keys.Count} keys in queue (index order):");
+            string[] items = _Queue.ToArray();
+            Console.WriteLine($"Listing {items.Length} items in queue:");
 
-            for (int i = 0; i < keys.Count; i++)
+            for (int i = 0; i < items.Length; i++)
             {
-                string key = keys[i];
-                Console.WriteLine($"[{i}]: {key}");
+                Console.WriteLine($"[{i}]: {items[i]}");
             }
 
             Console.WriteLine("");

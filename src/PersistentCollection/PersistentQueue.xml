@@ -10,525 +10,112 @@
             Provides index-based access to data items.
             </summary>
         </member>
+        <member name="P:PersistentCollection.PersistentList`1.IsSynchronized">
+            <summary>
+            Boolean indicating if the object is thread-safe.
+            </summary>
+        </member>
+        <member name="P:PersistentCollection.PersistentList`1.SyncRoot">
+            <summary>
+            Object to use in synchronization across threads.
+            </summary>
+        </member>
         <member name="P:PersistentCollection.PersistentList`1.Count">
             <summary>
-            Number of entries in the list.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.Length">
-            <summary>
-            Number of bytes in the list.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.Capacity">
-            <summary>
-            Gets the maximum number of elements that the list can contain.
-            </summary>
-            <remarks>Returns int.MaxValue since PersistentList is only limited by disk space.</remarks>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.DataAdded">
-            <summary>
-            Event handler for when data is added to the list.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.DataRemoved">
-            <summary>
-            Event handler for when data is removed from the list.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.DataUpdated">
-            <summary>
-            Event handler for when data is updated in the list.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.ExceptionEncountered">
-            <summary>
-            Event handler for when an exception is raised.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.Cleared">
-            <summary>
-            Event handler for when the list is cleared.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentList`1.IndexFile">
-            <summary>
-            Name of the index file. This file will live in the same directory as data objects.
+            Number of entries waiting in the list.
             </summary>
         </member>
         <member name="P:PersistentCollection.PersistentList`1.IsReadOnly">
             <summary>
-            Whether the list is read-only. Always returns false.
+            Boolean indicating if the list is read-only.  This will always be false.
             </summary>
         </member>
         <member name="P:PersistentCollection.PersistentList`1.Item(System.Int32)">
             <summary>
-            Gets or sets the element at the specified index.
+            Retrieve by index.
             </summary>
-            <param name="index">The zero-based index of the element to get or set.</param>
-            <returns>The element at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.#ctor(System.String,System.Boolean)">
-            <summary>
-            Instantiate.
-            </summary>
-            <param name="directory">Directory.</param>
-            <param name="clearOnDispose">Clear the list's contents on dispose. This will delete saved data.</param>
+            <param name="index">Index.</param>
+            <returns>Value at index.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.IndexOf(`0)">
             <summary>
-            Determines the index of a specific item in the list.
+            Retrieve index of an item.
             </summary>
-            <param name="item">The object to locate in the list.</param>
-            <returns>The index of the item if found; otherwise, -1.</returns>
+            <param name="item">Item.</param>
+            <returns>Index.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.Insert(System.Int32,`0)">
             <summary>
-            Inserts an item at the specified index.
+            Insert an item at a specific index.
             </summary>
-            <param name="index">The zero-based index at which item should be inserted.</param>
-            <param name="item">The object to insert into the list.</param>
+            <param name="index">Index.</param>
+            <param name="item">Item.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentList`1.RemoveAt(System.Int32)">
+            <summary>
+            Remove an item at a specific index.
+            </summary>
+            <param name="index">Index.</param>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.Add(`0)">
             <summary>
-            Adds an item to the list.
+            Add an item.
             </summary>
-            <param name="item">The object to add to the list.</param>
+            <param name="item">Item.</param>
         </member>
-        <member name="M:PersistentCollection.PersistentList`1.Add(`0,System.Nullable{System.DateTime})">
+        <member name="M:PersistentCollection.PersistentList`1.Clear">
             <summary>
-            Adds an item to the list with a specified expiration.
+            Clear the list.
             </summary>
-            <param name="item">The object to add to the list.</param>
-            <param name="expiration">When the item should expire.</param>
-            <returns>The key of the added item.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.Contains(`0)">
             <summary>
-            Determines whether the list contains a specific item.
+            Check if the list contains an item.
             </summary>
-            <param name="item">The object to locate in the list.</param>
-            <returns>true if the item is found; otherwise, false.</returns>
+            <param name="item">Item.</param>
+            <returns>True if exists.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.CopyTo(`0[],System.Int32)">
             <summary>
-            Copies the entire list to a compatible one-dimensional array, starting at the specified index of the target array.
+            Copy the list to an array.
             </summary>
-            <param name="array">The one-dimensional array that is the destination of the elements copied from list.</param>
-            <param name="arrayIndex">The zero-based index in array at which copying begins.</param>
+            <param name="array">Array.</param>
+            <param name="arrayIndex">Array index.</param>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.Remove(`0)">
             <summary>
-            Removes the first occurrence of a specific object from the list.
+            Remove an item.
             </summary>
-            <param name="item">The object to remove from the list.</param>
-            <returns>true if item was successfully removed; otherwise, false.</returns>
+            <param name="item">Item.</param>
+            <returns>True if removed.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.GetEnumerator">
             <summary>
-            Returns an enumerator that iterates through the list.
+            Get enumerator.
             </summary>
-            <returns>An enumerator for the list.</returns>
+            <returns>Enumerator.</returns>
         </member>
-        <member name="M:PersistentCollection.PersistentList`1.System#Collections#IEnumerable#GetEnumerator">
+        <member name="M:PersistentCollection.PersistentList`1.#ctor(System.String)">
             <summary>
-            Returns an enumerator that iterates through the list.
+            Persistent list.
             </summary>
-            <returns>An enumerator for the list.</returns>
+            <param name="persistenceFile">Persistence file.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentList`1.Dispose(System.Boolean)">
+            <summary>
+            Dispose.
+            </summary>
+            <param name="disposing">Disposing.</param>
         </member>
         <member name="M:PersistentCollection.PersistentList`1.Dispose">
             <summary>
             Dispose.
             </summary>
         </member>
-        <member name="M:PersistentCollection.PersistentList`1.Add(System.String)">
-            <summary>
-            Add data to the list.
-            </summary>
-            <param name="data">Data.</param>
-            <returns>Key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Add(System.Byte[])">
-            <summary>
-            Add data to the list.
-            </summary>
-            <param name="data">Data.</param>
-            <returns>Key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.AddAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Add data to the list asynchronously.
-            </summary>
-            <param name="data">Data.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.AddAsync(System.Byte[],System.Threading.CancellationToken)">
-            <summary>
-            Add data to the list asynchronously.
-            </summary>
-            <param name="data">Data.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.AddAsync(`0,System.Threading.CancellationToken)">
-            <summary>
-            Add an item to the list asynchronously.
-            </summary>
-            <param name="item">The item to add.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The key of the added item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Update(System.String,System.String)">
-            <summary>
-            Update existing data in the list.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="data">New data.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Update(System.String,System.Byte[])">
-            <summary>
-            Update existing data in the list.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="data">New data.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.UpdateAsync(System.String,System.String,System.Threading.CancellationToken)">
-            <summary>
-            Update existing data in the list asynchronously.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="data">New data.</param>
-            <param name="token">Cancellation token.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.UpdateAsync(System.String,System.Byte[],System.Threading.CancellationToken)">
-            <summary>
-            Update existing data in the list asynchronously.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="data">New data.</param>
-            <param name="token">Cancellation token.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Update(System.String,`0)">
-            <summary>
-            Update an existing item in the list by its key.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="item">The new value of the item.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.UpdateAsync(System.String,`0,System.Threading.CancellationToken)">
-            <summary>
-            Update an existing item in the list by its key asynchronously.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="item">The new value of the item.</param>
-            <param name="token">Cancellation token.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Get(System.Int32)">
-            <summary>
-            Retrieve data from the list by index.
-            </summary>
-            <param name="index">Zero-based index.</param>
-            <returns>Data.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.GetAsync(System.Int32,System.Threading.CancellationToken)">
-            <summary>
-            Retrieve data from the list asynchronously by index.
-            </summary>
-            <param name="index">Zero-based index.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Data.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Get(System.String)">
-            <summary>
-            Retrieve data from the list by key.
-            </summary>
-            <param name="key">Key.</param>
-            <returns>Data.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.GetAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Retrieve data from the list asynchronously by key.
-            </summary>
-            <param name="key">Key.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Data.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.GetByKey(System.String)">
-            <summary>
-            Get an item from the list by its key.
-            </summary>
-            <param name="key">The key of the item to get.</param>
-            <returns>The item with the specified key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.GetByKeyAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Get an item from the list by its key asynchronously.
-            </summary>
-            <param name="key">The key of the item to get.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The item with the specified key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.RemoveAt(System.Int32)">
-            <summary>
-            Remove a specific entry from the list by index.
-            </summary>
-            <param name="index">Zero-based index.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Remove(System.String)">
-            <summary>
-            Remove a specific entry from the list by key.
-            </summary>
-            <param name="key">Key.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.GetKeys">
-            <summary>
-            Retrieve all keys in the list.
-            </summary>
-            <returns>List of keys.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.GetKeysAsync(System.Threading.CancellationToken)">
-            <summary>
-            Retrieve all keys asynchronously in the list.
-            </summary>
-            <param name="token">Cancellation token.</param>
-            <returns>List of keys.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.AddRange(System.Collections.Generic.IEnumerable{`0})">
-            <summary>
-            Adds a collection of items to the end of the list.
-            </summary>
-            <param name="collection">The collection whose elements should be added to the end of the list.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.AddRangeAsync(System.Collections.Generic.IEnumerable{`0},System.Threading.CancellationToken)">
-            <summary>
-            Adds a collection of items to the end of the list asynchronously.
-            </summary>
-            <param name="collection">The collection whose elements should be added to the end of the list.</param>
-            <param name="token">Cancellation token.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.AsReadOnly">
-            <summary>
-            Returns a read-only wrapper for the current list.
-            </summary>
-            <returns>A read-only wrapper around the current list.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.BinarySearch(`0,System.Collections.Generic.IComparer{`0})">
-            <summary>
-            Searches the entire sorted list for an element using the specified comparer and returns the zero-based index of the element.
-            </summary>
-            <param name="item">The object to locate. The value can be null for reference types.</param>
-            <param name="comparer">The comparer implementation to use when comparing elements.</param>
-            <returns>The zero-based index of item in the sorted list, if item is found; otherwise, a negative number.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.BinarySearch(System.Int32,System.Int32,`0,System.Collections.Generic.IComparer{`0})">
-            <summary>
-            Searches a range of elements in the sorted list for an element using the specified comparer and returns the zero-based index of the element.
-            </summary>
-            <param name="index">The zero-based starting index of the range to search.</param>
-            <param name="count">The length of the range to search.</param>
-            <param name="item">The object to locate. The value can be null for reference types.</param>
-            <param name="comparer">The comparer implementation to use when comparing elements.</param>
-            <returns>The zero-based index of item in the sorted list, if item is found; otherwise, a negative number.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.RemoveAll(System.Predicate{`0})">
-            <summary>
-            Removes all elements that match the conditions defined by the specified predicate.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions of the elements to remove.</param>
-            <returns>The number of elements removed from the list.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.TrueForAll(System.Predicate{`0})">
-            <summary>
-            Determines whether every element in the list matches the conditions defined by the specified predicate.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions to check against the elements.</param>
-            <returns>true if every element in the list matches the conditions defined by the specified predicate; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Reverse">
-            <summary>
-            Reverses the order of the elements in the entire list.
-            </summary>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Reverse(System.Int32,System.Int32)">
-            <summary>
-            Reverses the order of the elements in the specified range.
-            </summary>
-            <param name="index">The zero-based starting index of the range to reverse.</param>
-            <param name="count">The number of elements in the range to reverse.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Sort">
-            <summary>
-            Sorts the elements in the entire list using the default comparer.
-            </summary>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Sort(System.Collections.Generic.IComparer{`0})">
-            <summary>
-            Sorts the elements in the entire list using the specified comparer.
-            </summary>
-            <param name="comparer">The comparer implementation to use when comparing elements.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Sort(System.Int32,System.Int32,System.Collections.Generic.IComparer{`0})">
-            <summary>
-            Sorts the elements in a range of elements in the list using the specified comparer.
-            </summary>
-            <param name="index">The zero-based starting index of the range to sort.</param>
-            <param name="count">The length of the range to sort.</param>
-            <param name="comparer">The comparer implementation to use when comparing elements.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Sort(System.Comparison{`0})">
-            <summary>
-            Sorts the elements in the entire list using the specified comparison.
-            </summary>
-            <param name="comparison">The comparison to use when comparing elements.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.ForEach(System.Action{`0})">
-            <summary>
-            Performs the specified action on each element of the list.
-            </summary>
-            <param name="action">The action delegate to perform on each element of the list.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Find(System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the first occurrence within the entire list.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The first element that matches the conditions, or default(T) if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindIndex(System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the zero-based index of the first occurrence within the entire list.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The zero-based index of the first element that matches the conditions, or -1 if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindIndex(System.Int32,System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the zero-based index of the first occurrence within the range of elements 
-            that extends from the specified index to the end of the list.
-            </summary>
-            <param name="startIndex">The zero-based starting index of the search.</param>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The zero-based index of the first element that matches the conditions, or -1 if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindIndex(System.Int32,System.Int32,System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the zero-based index of the first occurrence within the range of elements 
-            that starts at the specified index and contains the specified number of elements.
-            </summary>
-            <param name="startIndex">The zero-based starting index of the search.</param>
-            <param name="count">The number of elements in the section to search.</param>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The zero-based index of the first element that matches the conditions, or -1 if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindLast(System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the last occurrence within the entire list.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The last element that matches the conditions, or default(T) if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindLastIndex(System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the zero-based index of the last occurrence within the entire list.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The zero-based index of the last element that matches the conditions, or -1 if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindLastIndex(System.Int32,System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the zero-based index of the last occurrence within the range of elements 
-            that extends from the first element to the specified index.
-            </summary>
-            <param name="startIndex">The zero-based starting index of the backward search.</param>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The zero-based index of the last element that matches the conditions, or -1 if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindLastIndex(System.Int32,System.Int32,System.Predicate{`0})">
-            <summary>
-            Searches for an element that matches the conditions defined by the specified predicate, 
-            and returns the zero-based index of the last occurrence within the range of elements 
-            that contains the specified number of elements and ends at the specified index.
-            </summary>
-            <param name="startIndex">The zero-based starting index of the backward search.</param>
-            <param name="count">The number of elements in the section to search.</param>
-            <param name="match">The predicate delegate that defines the conditions of the element to search for.</param>
-            <returns>The zero-based index of the last element that matches the conditions, or -1 if not found.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.FindAll(System.Predicate{`0})">
-            <summary>
-            Retrieves all the elements that match the conditions defined by the specified predicate.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions of the elements to search for.</param>
-            <returns>A list containing all the elements that match the conditions.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Exists(System.Predicate{`0})">
-            <summary>
-            Determines whether the list contains elements that match the conditions defined by the specified predicate.
-            </summary>
-            <param name="match">The predicate delegate that defines the conditions of the elements to search for.</param>
-            <returns>true if the list contains one or more elements that match the conditions; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.ConvertAll``1(System.Converter{`0,``0})">
-            <summary>
-            Converts the elements in the current list to another type, and returns a list containing the converted elements.
-            </summary>
-            <typeparam name="TOutput">The type of the elements of the target list.</typeparam>
-            <param name="converter">A converter delegate that converts each element from one type to another type.</param>
-            <returns>A list of the target type containing the converted elements.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.InsertRange(System.Int32,System.Collections.Generic.IEnumerable{`0})">
-            <summary>
-            Inserts the elements of a collection into the list at the specified index.
-            </summary>
-            <param name="index">The zero-based index at which the new elements should be inserted.</param>
-            <param name="collection">The collection whose elements should be inserted into the list.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.RemoveRange(System.Int32,System.Int32)">
-            <summary>
-            Removes a range of elements from the list.
-            </summary>
-            <param name="index">The zero-based starting index of the range of elements to remove.</param>
-            <param name="count">The number of elements to remove.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.GetRange(System.Int32,System.Int32)">
-            <summary>
-            Returns a view of a range of elements in the source list.
-            </summary>
-            <param name="index">The zero-based starting position in the source list.</param>
-            <param name="count">The number of elements in the range.</param>
-            <returns>A view of a range of elements in the source list.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.EnsureCapacity(System.Int32)">
-            <summary>
-            Ensures that the size of the list can accommodate the specified number of elements.
-            </summary>
-            <param name="capacity">The minimum size to ensure.</param>
-            <remarks>This is a no-op in PersistentList as it doesn't use internal capacity like regular List.</remarks>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.Clear">
-            <summary>
-            Destructively empty the list. This will delete all of the data files in the directory.
-            </summary>
-        </member>
-        <member name="M:PersistentCollection.PersistentList`1.ToList">
-            <summary>
-            Get a copy of this list.
-            </summary>
-            <returns>A copy of the list.</returns>
-        </member>
         <member name="T:PersistentCollection.PersistentQueue`1">
             <summary>
             Persistent generic queue. Queued entries are backed on disk.
             Data is dequeued from the queue in a first-in-first-out manner.
-            Implements the standard Queue&lt;T&gt; interface methods with additional indexed access.
             </summary>
             <typeparam name="T">Type of elements in the queue</typeparam>
         </member>
@@ -537,312 +124,114 @@
             Number of entries waiting in the queue.
             </summary>
         </member>
-        <member name="P:PersistentCollection.PersistentQueue`1.Length">
+        <member name="P:PersistentCollection.PersistentQueue`1.IsSynchronized">
             <summary>
-            Number of bytes waiting in the queue.
+            Boolean indicating if the object is thread-safe.
             </summary>
         </member>
-        <member name="P:PersistentCollection.PersistentQueue`1.Item(System.Int32)">
+        <member name="P:PersistentCollection.PersistentQueue`1.SyncRoot">
             <summary>
-            Gets an item at the specified index in the queue without removing it.
-            </summary>
-            <param name="index">The zero-based index of the element to get.</param>
-            <returns>The element at the specified index.</returns>
-        </member>
-        <member name="P:PersistentCollection.PersistentQueue`1.DataEnqueued">
-            <summary>
-            Event handler for when data is added to the queue.
+            Object to use in synchronization across threads.
             </summary>
         </member>
-        <member name="P:PersistentCollection.PersistentQueue`1.DataDequeued">
+        <member name="M:PersistentCollection.PersistentQueue`1.#ctor(System.String)">
             <summary>
-            Event handler for when data is removed from the queue.
+            Persistent queue.
             </summary>
+            <param name="persistenceFile">Persistence file.</param>
         </member>
-        <member name="P:PersistentCollection.PersistentQueue`1.ExceptionEncountered">
+        <member name="M:PersistentCollection.PersistentQueue`1.Dispose(System.Boolean)">
             <summary>
-            Event handler for when an exception is raised.
+            Dispose.
             </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentQueue`1.Cleared">
-            <summary>
-            Event handler for when the queue is cleared.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentQueue`1.IndexFile">
-            <summary>
-            Name of the index file. This file will live in the same directory as data objects.
-            </summary>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.#ctor(System.String,System.Boolean)">
-            <summary>
-            Instantiate a PersistentQueue with default JSON serialization.
-            For byte[] type, no serialization is performed.
-            </summary>
-            <param name="directory">Directory where queue data will be stored.</param>
-            <param name="clearOnDispose">Clear the queue's contents on dispose. This will delete saved data.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.#ctor(System.String,System.Func{`0,System.Byte[]},System.Func{System.Byte[],`0},System.Boolean)">
-            <summary>
-            Instantiate with custom serialization functions.
-            </summary>
-            <param name="directory">Directory where queue data will be stored.</param>
-            <param name="serializer">Function to serialize T to byte array.</param>
-            <param name="deserializer">Function to deserialize byte array to T.</param>
-            <param name="clearOnDispose">Clear the queue's contents on dispose. This will delete saved data.</param>
+            <param name="disposing">Disposing.</param>
         </member>
         <member name="M:PersistentCollection.PersistentQueue`1.Dispose">
             <summary>
-            Dispose of resources.
-            </summary>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Enqueue(`0)">
-            <summary>
-            Add an item to the queue.
-            </summary>
-            <param name="item">The item to add to the queue.</param>
-            <returns>Key that can be used to retrieve the item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.EnqueueAsync(`0,System.Threading.CancellationToken)">
-            <summary>
-            Add an item to the queue asynchronously.
-            </summary>
-            <param name="item">The item to add to the queue.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Key that can be used to retrieve the item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Dequeue">
-            <summary>
-            Retrieve and remove the oldest item from the queue.
-            </summary>
-            <returns>The oldest item in the queue.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Dequeue(System.String,System.Boolean)">
-            <summary>
-            Retrieve a specific item from the queue.
-            </summary>
-            <param name="key">The key of the item to retrieve.</param>
-            <param name="remove">Whether to remove the item from the queue.</param>
-            <returns>The requested item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.DequeueAt(System.Int32,System.Boolean)">
-            <summary>
-            Retrieve an item at the specified index from the queue.
-            </summary>
-            <param name="index">Zero-based index of the item.</param>
-            <param name="remove">Whether to remove the item from the queue.</param>
-            <returns>The item at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.DequeueAsync(System.Boolean,System.Threading.CancellationToken)">
-            <summary>
-            Retrieve and remove the oldest item from the queue asynchronously.
-            </summary>
-            <param name="remove">Whether to remove the item from the queue.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the oldest item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.DequeueAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
-            <summary>
-            Retrieve a specific item from the queue asynchronously.
-            </summary>
-            <param name="key">The key of the item to retrieve.</param>
-            <param name="remove">Whether to remove the item from the queue.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the requested item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.DequeueAtAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)">
-            <summary>
-            Retrieve an item at the specified index from the queue asynchronously.
-            </summary>
-            <param name="index">Zero-based index of the item.</param>
-            <param name="remove">Whether to remove the item from the queue.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the item at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Peek">
-            <summary>
-            Examine the next item in the queue without removing it.
-            </summary>
-            <returns>The oldest item in the queue.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.PeekAt(System.Int32)">
-            <summary>
-            Examine an item at the specified index without removing it.
-            </summary>
-            <param name="index">Zero-based index of the item.</param>
-            <returns>The item at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Get(System.Int32)">
-            <summary>
-            Get data from the queue by index.
-            </summary>
-            <param name="index">Zero-based index.</param>
-            <returns>Data at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.GetBytes(System.Int32)">
-            <summary>
-            Get data from the queue by index.
-            </summary>
-            <param name="index">Zero-based index.</param>
-            <returns>Data as byte array at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.GetBytes(System.String)">
-            <summary>
-            Get data from the queue by key.
-            </summary>
-            <param name="key">Key of the item.</param>
-            <returns>Data as byte array for the specified key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Remove(System.String)">
-            <summary>
-            Remove by key.
-            </summary>
-            <param name="key">Key.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.GetBytesAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Get data from the queue by key asynchronously.
-            </summary>
-            <param name="key">Key of the item.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the data for the specified key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.GetBytesAsync(System.Int32,System.Threading.CancellationToken)">
-            <summary>
-            Get data from the queue by index asynchronously.
-            </summary>
-            <param name="index">Zero-based index.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the data at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.PeekAsync(System.Threading.CancellationToken)">
-            <summary>
-            Examine the next item in the queue asynchronously without removing it.
-            </summary>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the oldest item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.PeekAtAsync(System.Int32,System.Threading.CancellationToken)">
-            <summary>
-            Examine an item at the specified index asynchronously without removing it.
-            </summary>
-            <param name="index">Zero-based index of the item.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the item at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.TryDequeue(`0@)">
-            <summary>
-            Attempts to dequeue an item from the queue.
-            </summary>
-            <param name="result">When this method returns, contains the item if successful; otherwise, the default value.</param>
-            <returns>true if an item was successfully dequeued; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.TryPeek(`0@)">
-            <summary>
-            Attempts to peek at an item in the queue without removing it.
-            </summary>
-            <param name="result">When this method returns, contains the item if successful; otherwise, the default value.</param>
-            <returns>true if an item was successfully retrieved; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.TryPeekAt(System.Int32,`0@)">
-            <summary>
-            Attempts to get an item at the specified index without removing it.
-            </summary>
-            <param name="index">Zero-based index of the item.</param>
-            <param name="result">When this method returns, contains the item if successful; otherwise, the default value.</param>
-            <returns>true if an item was successfully retrieved; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.TryDequeueAsync(System.Boolean,System.Threading.CancellationToken)">
-            <summary>
-            Asynchronously attempts to dequeue an item from the queue.
-            </summary>
-            <param name="remove">Whether to remove the item from the queue.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with a tuple indicating success and the dequeued item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.TryPeekAsync(System.Threading.CancellationToken)">
-            <summary>
-            Asynchronously attempts to peek at an item in the queue without removing it.
-            </summary>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with a tuple indicating success and the peeked item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.TryPeekAtAsync(System.Int32,System.Threading.CancellationToken)">
-            <summary>
-            Asynchronously attempts to get an item at the specified index without removing it.
-            </summary>
-            <param name="index">Zero-based index of the item.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with a tuple indicating success and the item at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Contains(System.String)">
-            <summary>
-            Determines whether the queue contains a specific key.
-            </summary>
-            <param name="key">The key to locate in the queue.</param>
-            <returns>true if the key is found in the queue; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.ContainsIndex(System.Int32)">
-            <summary>
-            Determines whether the queue contains an element at the specified index.
-            </summary>
-            <param name="index">The zero-based index to check.</param>
-            <returns>true if an element exists at the specified index; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.RemoveAt(System.Int32)">
-            <summary>
-            Remove an entry at the specified index.
-            </summary>
-            <param name="index">Zero-based index.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.Clear">
-            <summary>
-            Destructively empty the queue. This will delete all data files.
+            Dispose.
             </summary>
         </member>
         <member name="M:PersistentCollection.PersistentQueue`1.GetEnumerator">
             <summary>
-            Returns an enumerator that iterates through the queue in index order.
+            Get enumerator.
             </summary>
-            <returns>An enumerator for the queue.</returns>
+            <returns>Enumerator.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentQueue`1.System#Collections#IEnumerable#GetEnumerator">
             <summary>
-            Returns an enumerator that iterates through the queue.
+            Get enumerator.
             </summary>
-            <returns>An enumerator for the queue.</returns>
+            <returns>Enumerator.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentQueue`1.CopyTo(`0[],System.Int32)">
             <summary>
-            Copies the queue to an array, starting at a particular array index.
+            Copy the queue to an array.
             </summary>
-            <param name="array">The one-dimensional array that is the destination of the elements copied from the queue.</param>
-            <param name="arrayIndex">The zero-based index in array at which copying begins.</param>
+            <param name="array">Array.</param>
+            <param name="arrayIndex">Array index.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentQueue`1.CopyTo(System.Array,System.Int32)">
+            <summary>
+            Copy the queue to an array.
+            </summary>
+            <param name="array">Array.</param>
+            <param name="arrayIndex">Array index.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentQueue`1.Clear">
+            <summary>
+            Clear the queue.
+            </summary>
+        </member>
+        <member name="M:PersistentCollection.PersistentQueue`1.Contains(`0)">
+            <summary>
+            Check if the queue contains an item.
+            </summary>
+            <param name="item">Item.</param>
+            <returns>True if exists.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentQueue`1.Dequeue">
+            <summary>
+            Dequeue an item from the queue.
+            </summary>
+            <returns>Item.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentQueue`1.Enqueue(`0)">
+            <summary>
+            Enqueue an item to the stack.
+            </summary>
+            <param name="item">Item.</param>
+            <exception cref="T:System.NotImplementedException"></exception>
+        </member>
+        <member name="M:PersistentCollection.PersistentQueue`1.Peek">
+            <summary>
+            Peek at the next item to dequeue.
+            </summary>
+            <returns>Item.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentQueue`1.ToArray">
             <summary>
-            Converts the queue to an array.
+            Create an array from the queue.
             </summary>
-            <returns>A new array containing copies of the elements of the queue.</returns>
+            <returns>Array.</returns>
         </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.GetKeys">
+        <member name="M:PersistentCollection.PersistentQueue`1.TryPeek(`0@)">
             <summary>
-            Returns all keys in the queue, ordered by index.
+            Try to peek.
             </summary>
-            <returns>List of keys.</returns>
+            <param name="item">Item.</param>
+            <returns>True if successful.</returns>
         </member>
-        <member name="M:PersistentCollection.PersistentQueue`1.GetKeysAsync(System.Threading.CancellationToken)">
+        <member name="M:PersistentCollection.PersistentQueue`1.TryDequeue(`0@)">
             <summary>
-            Returns all keys in the queue asynchronously, ordered by index.
+            Try to dequeue.
             </summary>
-            <param name="token">Cancellation token.</param>
-            <returns>A task with the list of keys.</returns>
+            <param name="item">Item.</param>
+            <returns>True if successful.</returns>
         </member>
         <member name="T:PersistentCollection.PersistentStack`1">
             <summary>
             Persistent stack.  Queued entries are backed on disk.
             Data is popped from the stack in a last-in-first-out manner.
-            Provides index-based access to stack elements.
             </summary>
         </member>
         <member name="P:PersistentCollection.PersistentStack`1.Count">
@@ -850,345 +239,108 @@
             Number of entries waiting in the stack.
             </summary>
         </member>
-        <member name="P:PersistentCollection.PersistentStack`1.Length">
+        <member name="P:PersistentCollection.PersistentStack`1.IsSynchronized">
             <summary>
-            Number of bytes waiting in the stack.
+            Boolean indicating if the object is thread-safe.
             </summary>
         </member>
-        <member name="P:PersistentCollection.PersistentStack`1.Item(System.Int32)">
+        <member name="P:PersistentCollection.PersistentStack`1.SyncRoot">
             <summary>
-            Gets or sets the element at the specified index.
-            </summary>
-            <param name="index">The zero-based index of the element to get or set.</param>
-            <returns>The element at the specified index.</returns>
-        </member>
-        <member name="P:PersistentCollection.PersistentStack`1.DataAdded">
-            <summary>
-            Event handler for when data is added to the stack.
+            Object to use in synchronization across threads.
             </summary>
         </member>
-        <member name="P:PersistentCollection.PersistentStack`1.DataRemoved">
+        <member name="M:PersistentCollection.PersistentStack`1.#ctor(System.String)">
             <summary>
-            Event handler for when data is removed from the stack.
+            Persistent stack.
             </summary>
+            <param name="persistenceFile">Persistence file.</param>
         </member>
-        <member name="P:PersistentCollection.PersistentStack`1.DataUpdated">
+        <member name="M:PersistentCollection.PersistentStack`1.Dispose(System.Boolean)">
             <summary>
-            Event handler for when data is updated in the stack.
+            Dispose.
             </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentStack`1.ExceptionEncountered">
-            <summary>
-            Event handler for when an exception is raised.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentStack`1.Cleared">
-            <summary>
-            Event handler for when the stack is cleared.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentStack`1.IndexFile">
-            <summary>
-            Name of the index file. This file will live in the same directory as data objects.
-            </summary>
-        </member>
-        <member name="P:PersistentCollection.PersistentStack`1.Serializer">
-            <summary>
-            The serializer used for the stack's objects.
-            </summary>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.#ctor(System.String,System.Boolean)">
-            <summary>
-            Instantiate.
-            </summary>
-            <param name="directory">Directory.</param>
-            <param name="clearOnDispose">Clear the stack's contents on dispose.  This will delete saved data.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.#ctor(System.String,SerializationHelper.Serializer,System.Boolean)">
-            <summary>
-            Instantiate with a custom serializer.
-            </summary>
-            <param name="directory">Directory.</param>
-            <param name="serializer">Custom serializer.</param>
-            <param name="clearOnDispose">Clear the stack's contents on dispose.  This will delete saved data.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.TryPeek(`0@)">
-            <summary>
-            Returns a value that indicates whether there is an object at the top of the Stack, and if one
-            is present, copies it to the result parameter. The object is not removed from the Stack.
-            </summary>
-            <param name="result">If present, the object at the top of the Stack; otherwise, the default value of T.</param>
-            <returns>true if there is an object at the top of the Stack; false if the Stack is empty.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.TryPop(`0@)">
-            <summary>
-            Returns a value that indicates whether there is an object at the top of the Stack, and if one
-            is present, copies it to the result parameter and removes it from the Stack.
-            </summary>
-            <param name="result">If present, the object at the top of the Stack; otherwise, the default value of T.</param>
-            <returns>true if there is an object at the top of the Stack; false if the Stack is empty.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.TryPeekAt(System.Int32,`0@)">
-            <summary>
-            Attempts to retrieve an item at a specific index without removing it.
-            </summary>
-            <param name="index">The zero-based index of the item to retrieve.</param>
-            <param name="result">If present, the object at the specified index; otherwise, the default value of T.</param>
-            <returns>true if there is an object at the specified index; false if the index is out of range.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Peek">
-            <summary>
-            Returns the object at the top of the Stack without removing it.
-            </summary>
-            <returns>The object at the top of the Stack.</returns>
-            <exception cref="T:System.InvalidOperationException">The Stack is empty.</exception>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PeekAt(System.Int32)">
-            <summary>
-            Retrieves an item at a specific index without removing it.
-            </summary>
-            <param name="index">The zero-based index of the item to retrieve.</param>
-            <returns>The item at the specified index.</returns>
-            <exception cref="T:System.ArgumentOutOfRangeException">Index is out of range.</exception>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Pop">
-            <summary>
-            Returns the object at the top of the Stack and removes it.
-            </summary>
-            <returns>The object at the top of the Stack.</returns>
-            <exception cref="T:System.InvalidOperationException">The Stack is empty.</exception>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PopAt(System.Int32,System.Boolean)">
-            <summary>
-            Retrieves and optionally removes an item at a specific index.
-            </summary>
-            <param name="index">The zero-based index of the item to retrieve.</param>
-            <param name="remove">Whether to remove the item from the stack.</param>
-            <returns>The item at the specified index.</returns>
-            <exception cref="T:System.ArgumentOutOfRangeException">Index is out of range.</exception>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Push(`0)">
-            <summary>
-            Inserts an object at the top of the Stack.
-            </summary>
-            <param name="item">The object to push onto the Stack.</param>
-            <returns>Key of the pushed item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Contains(`0)">
-            <summary>
-            Determines whether an element is in the Stack.
-            </summary>
-            <param name="item">The object to locate in the Stack.</param>
-            <returns>true if item is found in the Stack; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.ContainsKey(System.String)">
-            <summary>
-            Determines whether a specific key exists in the Stack.
-            </summary>
-            <param name="key">The key to locate in the Stack.</param>
-            <returns>true if the key is found in the Stack; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.ContainsIndex(System.Int32)">
-            <summary>
-            Determines whether an index is valid in the Stack.
-            </summary>
-            <param name="index">The zero-based index to check.</param>
-            <returns>true if the index is valid in the Stack; otherwise, false.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.CopyTo(`0[],System.Int32)">
-            <summary>
-            Copies the Stack to an existing one-dimensional Array, starting at the specified array index.
-            </summary>
-            <param name="array">The one-dimensional Array that is the destination of the elements copied from Stack.</param>
-            <param name="arrayIndex">The zero-based index in array at which copying begins.</param>
-            <exception cref="T:System.ArgumentNullException">array is null.</exception>
-            <exception cref="T:System.ArgumentOutOfRangeException">arrayIndex is less than zero.</exception>
-            <exception cref="T:System.ArgumentException">The number of elements in the source Stack is greater than the available space from arrayIndex to the end of the destination array.</exception>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.ToArray">
-            <summary>
-            Copies the stack to a new array.
-            </summary>
-            <returns>A new array containing copies of the elements of the Stack.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.GetEnumerator">
-            <summary>
-            Returns an enumerator that iterates through the stack.
-            </summary>
-            <returns>An enumerator for the stack.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.System#Collections#IEnumerable#GetEnumerator">
-            <summary>
-            Returns an enumerator that iterates through the stack.
-            </summary>
-            <returns>An enumerator for the stack.</returns>
+            <param name="disposing">Disposing.</param>
         </member>
         <member name="M:PersistentCollection.PersistentStack`1.Dispose">
             <summary>
             Dispose.
             </summary>
         </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Push(System.String)">
+        <member name="M:PersistentCollection.PersistentStack`1.GetEnumerator">
             <summary>
-            Add data to the stack.
+            Get enumerator.
             </summary>
-            <param name="data">Data.</param>
-            <returns>Key.</returns>
+            <returns>Enumerator.</returns>
         </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Push(System.Byte[])">
+        <member name="M:PersistentCollection.PersistentStack`1.System#Collections#IEnumerable#GetEnumerator">
             <summary>
-            Add data to the stack.
+            Get enumerator.
             </summary>
-            <param name="data">Data.</param>
-            <returns>Key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PushAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Add data to the stack asynchronously.
-            </summary>
-            <param name="data">Data.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PushAsync(System.Byte[],System.Threading.CancellationToken)">
-            <summary>
-            Add data to the stack asynchronously.
-            </summary>
-            <param name="data">Data.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Key.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PushAsync(`0,System.Threading.CancellationToken)">
-            <summary>
-            Push an item to the stack asynchronously.
-            </summary>
-            <param name="item">The item to push onto the stack.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Key of the pushed item.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PeekBytes(System.String)">
-            <summary>
-            Retrieves the byte data from the top of the stack without removing it.
-            </summary>
-            <param name="key">Key, if a specific key is needed. If null, gets the most recent item.</param>
-            <returns>Data in bytes.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.GetBytes(System.Int32)">
-            <summary>
-            Retrieves the byte data at a specific index without removing it.
-            </summary>
-            <param name="index">The zero-based index of the item to retrieve.</param>
-            <returns>Data in bytes.</returns>
-            <exception cref="T:System.ArgumentOutOfRangeException">Index is out of range.</exception>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Pop(System.String,System.Boolean)">
-            <summary>
-            Retrieve data from the stack.
-            </summary>
-            <param name="key">Key, if a specific key is needed.</param>
-            <param name="purge">Boolean flag indicating whether or not the entry should be removed from the stack once read.</param>
-            <returns>Data.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PopAsync(System.String,System.Boolean,System.Threading.CancellationToken)">
-            <summary>
-            Retrieve data from the stack asynchronously.
-            </summary>
-            <param name="key">Key, if a specific key is needed.</param>
-            <param name="purge">Boolean flag indicating whether or not the entry should be removed from the stack once read.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>Data.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PopItemAsync(System.Boolean,System.Threading.CancellationToken)">
-            <summary>
-            Asynchronously retrieves an item from the stack.
-            </summary>
-            <param name="purge">Boolean flag indicating whether or not the entry should be removed from the stack once read.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The item at the top of the stack.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.PopAtAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)">
-            <summary>
-            Asynchronously retrieves an item at a specific index.
-            </summary>
-            <param name="index">The zero-based index of the item to retrieve.</param>
-            <param name="remove">Whether to remove the item from the stack.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The item at the specified index.</returns>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.UpdateByKey(System.String,System.Byte[])">
-            <summary>
-            Updates an item at a specific key.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="data">The new data to store.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.UpdateByKeyAsync(System.String,System.Byte[],System.Threading.CancellationToken)">
-            <summary>
-            Updates an item at a specific key asynchronously.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="data">The new data to store.</param>
-            <param name="token">Cancellation token.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.UpdateByKeyAsync(System.String,`0,System.Threading.CancellationToken)">
-            <summary>
-            Updates an item at a specific key asynchronously.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="item">The new data to store.</param>
-            <param name="token">Cancellation token.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.UpdateByKey(System.String,`0)">
-            <summary>
-            Updates an item at a specific key.
-            </summary>
-            <param name="key">The key of the item to update.</param>
-            <param name="item">The new item to store.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.UpdateAt(System.Int32,`0)">
-            <summary>
-            Updates an item at a specific index.
-            </summary>
-            <param name="index">The zero-based index of the item to update.</param>
-            <param name="item">The new item to store.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.UpdateAtAsync(System.Int32,`0,System.Threading.CancellationToken)">
-            <summary>
-            Updates an item at a specific index asynchronously.
-            </summary>
-            <param name="index">The zero-based index of the item to update.</param>
-            <param name="item">The new item to store.</param>
-            <param name="token">Cancellation token.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.Purge(System.String)">
-            <summary>
-            Remove a specific entry from the stack.
-            </summary>
-            <param name="key">Key.</param>
-        </member>
-        <member name="M:PersistentCollection.PersistentStack`1.RemoveAt(System.Int32)">
-            <summary>
-            Remove an item at a specific index.
-            </summary>
-            <param name="index">The zero-based index of the item to remove.</param>
+            <returns>Enumerator.</returns>
         </member>
         <member name="M:PersistentCollection.PersistentStack`1.Clear">
             <summary>
-            Destructively empty the stack.  This will delete all of the data files in the directory.
+            Clear the stack.
             </summary>
         </member>
-        <member name="M:PersistentCollection.PersistentStack`1.GetKeys">
+        <member name="M:PersistentCollection.PersistentStack`1.Contains(`0)">
             <summary>
-            Gets all keys in the stack, ordered by index (most recent first).
+            Check if the stack contains an item.
             </summary>
-            <returns>List of keys.</returns>
+            <param name="item">Item.</param>
+            <returns>True if exists.</returns>
         </member>
-        <member name="M:PersistentCollection.PersistentStack`1.GetKeysAsync(System.Threading.CancellationToken)">
+        <member name="M:PersistentCollection.PersistentStack`1.Peek">
             <summary>
-            Gets all keys in the stack asynchronously, ordered by index (most recent first).
+            Peek at the top of the stack without removing from the stack.
             </summary>
-            <param name="token">Cancellation token.</param>
-            <returns>List of keys.</returns>
+            <returns>Item.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentStack`1.Pop">
+            <summary>
+            Pop an item from the stack.
+            </summary>
+            <returns>Item.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentStack`1.Push(`0)">
+            <summary>
+            Push an item to the stack.
+            </summary>
+            <param name="item">Item.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentStack`1.ToArray">
+            <summary>
+            Create an array from the stack.
+            </summary>
+            <returns>Array.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentStack`1.CopyTo(`0[],System.Int32)">
+            <summary>
+            Copy queue contents to an array.
+            </summary>
+            <param name="array">Array.</param>
+            <param name="arrayIndex">Array index.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentStack`1.CopyTo(System.Array,System.Int32)">
+            <summary>
+            Copy the queue to an array.
+            </summary>
+            <param name="array">Array.</param>
+            <param name="arrayIndex">Array index.</param>
+        </member>
+        <member name="M:PersistentCollection.PersistentStack`1.TryPeek(`0@)">
+            <summary>
+            Try to peek.
+            </summary>
+            <param name="item">Item.</param>
+            <returns>True if successful.</returns>
+        </member>
+        <member name="M:PersistentCollection.PersistentStack`1.TryPop(`0@)">
+            <summary>
+            Try to pop.
+            </summary>
+            <param name="item">Item.</param>
+            <returns>True if successful.</returns>
         </member>
     </members>
 </doc>

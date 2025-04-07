@@ -9,14 +9,14 @@
     public static class Program
     {
         private static bool _RunForever = true;
-        private static PersistentStack<string> _Stack = new PersistentStack<string>("./temp/", true);
+        private static PersistentStack<string> _Stack = new PersistentStack<string>("./temp/stack.idx");
 
         public static void Main(string[] args)
         {
-            _Stack.DataAdded += (s, key) => Console.WriteLine("Data pushed: " + key);
-            _Stack.DataRemoved += (s, key) => Console.WriteLine("Data removed: " + key);
-            _Stack.DataUpdated += (s, key) => Console.WriteLine("Data updated: " + key);
-            _Stack.Cleared += (s, _) => Console.WriteLine("Stack cleared");
+            Console.WriteLine("PersistentStack Test Application");
+            Console.WriteLine("Stack file: ./temp/stack.idx");
+            Console.WriteLine("Type '?' for help menu");
+            Console.WriteLine();
 
             while (_RunForever)
             {
@@ -29,6 +29,7 @@
                         break;
 
                     case "?":
+                    case "help":
                         Menu();
                         break;
 
@@ -44,28 +45,18 @@
                         Pop();
                         break;
 
-                    case "popat":
-                        PopAt();
+                    case "peek":
+                        Peek();
                         break;
 
                     case "depth":
-                        Console.WriteLine(_Stack.Count);
-                        break;
-
-                    case "length":
-                        Console.WriteLine(_Stack.Length + " bytes");
-                        break;
-
-                    case "purge":
-                        Purge();
-                        break;
-
-                    case "removeat":
-                        RemoveAt();
+                    case "count":
+                        Console.WriteLine($"Stack depth: {_Stack.Count}");
                         break;
 
                     case "clear":
                         _Stack.Clear();
+                        Console.WriteLine("Stack cleared");
                         break;
 
                     case "enumerate":
@@ -76,40 +67,24 @@
                         Contains();
                         break;
 
-                    case "containskey":
-                        ContainsKey();
+                    case "trypop":
+                        TryPop();
                         break;
 
-                    case "containsindex":
-                        ContainsIndex();
-                        break;
-
-                    case "peek":
-                        Peek();
-                        break;
-
-                    case "peekat":
-                        PeekAt();
-                        break;
-
-                    case "getbyindex":
-                        GetByIndex();
-                        break;
-
-                    case "updatebykey":
-                        UpdateByKey();
-                        break;
-
-                    case "updateat":
-                        UpdateAt();
+                    case "trypeek":
+                        TryPeek();
                         break;
 
                     case "toarray":
                         ToArray();
                         break;
 
-                    case "keys":
-                        ListKeys();
+                    case "copyto":
+                        CopyTo();
+                        break;
+
+                    default:
+                        Console.WriteLine("Unknown command. Type '?' for help.");
                         break;
                 }
             }
@@ -126,25 +101,15 @@
             Console.WriteLine("   cls             clear the screen");
             Console.WriteLine("   push            add to the stack");
             Console.WriteLine("   pop             read from the stack (top item)");
-            Console.WriteLine("   popat           read from the stack at specific index");
             Console.WriteLine("   peek            view top item without removing it");
-            Console.WriteLine("   peekat          view item at specific index without removing it");
-            Console.WriteLine("   getbyindex      get item by index (using indexer)");
-            Console.WriteLine("   depth           show the stack depth");
-            Console.WriteLine("   length          show the stack length in bytes");
-            Console.WriteLine("   purge           purge record from stack by key");
-            Console.WriteLine("   removeat        remove record from stack by index");
-            Console.WriteLine("   expire          expire a record and purge it from the stack");
-            Console.WriteLine("   getexp          retrieve the expiration for a given record");
+            Console.WriteLine("   trypop          safely attempt to pop an item");
+            Console.WriteLine("   trypeek         safely attempt to peek at the top item");
+            Console.WriteLine("   depth/count     show the stack depth");
             Console.WriteLine("   clear           empty the stack");
             Console.WriteLine("   enumerate       list all items in the stack");
             Console.WriteLine("   contains        check if stack contains a value");
-            Console.WriteLine("   containskey     check if stack contains a key");
-            Console.WriteLine("   containsindex   check if stack contains an index");
-            Console.WriteLine("   updatebykey     update an item by key");
-            Console.WriteLine("   updateat        update an item by index");
             Console.WriteLine("   toarray         display the stack as an array");
-            Console.WriteLine("   keys            list all keys in the stack");
+            Console.WriteLine("   copyto          copy stack to an array");
             Console.WriteLine("");
         }
 
@@ -153,8 +118,8 @@
             string data = Inputty.GetString("Data:", null, true);
             if (String.IsNullOrEmpty(data)) return;
 
-            string key = _Stack.Push(data);
-            Console.WriteLine("Key: " + key);
+            _Stack.Push(data);
+            Console.WriteLine("Item pushed to stack");
         }
 
         private static void Pop()
@@ -167,25 +132,6 @@
             catch (InvalidOperationException)
             {
                 Console.WriteLine("Stack is empty");
-            }
-        }
-
-        private static void PopAt()
-        {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            bool remove = Inputty.GetBoolean("Remove item?", true);
-
-            try
-            {
-                string data = _Stack.PopAt(index, remove);
-                Console.WriteLine($"Item at index {index}: {data}");
-                if (remove) Console.WriteLine("Item was removed from stack");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
             }
         }
 
@@ -202,117 +148,27 @@
             }
         }
 
-        private static void PeekAt()
+        private static void TryPop()
         {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
+            if (_Stack.TryPop(out string result))
             {
-                string data = _Stack.PeekAt(index);
-                Console.WriteLine($"Item at index {index}: {data}");
+                Console.WriteLine("Popped: " + result);
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine("Error: " + ex.Message);
+                Console.WriteLine("Stack is empty");
             }
         }
 
-        private static void GetByIndex()
+        private static void TryPeek()
         {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
+            if (_Stack.TryPeek(out string result))
             {
-                string data = _Stack[index];
-                Console.WriteLine($"Item at index {index}: {data}");
+                Console.WriteLine("Peeked: " + result);
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-        }
-
-        private static void UpdateByKey()
-        {
-            string key = Inputty.GetString("Key:", null, true);
-            if (String.IsNullOrEmpty(key)) return;
-
-            try
-            {
-                if (!_Stack.ContainsKey(key))
-                {
-                    Console.WriteLine("Key not found in stack");
-                    return;
-                }
-
-                string newData = Inputty.GetString("New data:", null, true);
-                if (String.IsNullOrEmpty(newData)) return;
-
-                _Stack.UpdateByKey(key, newData);
-                Console.WriteLine($"Item with key {key} updated successfully");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-        }
-
-        private static void UpdateAt()
-        {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
-            {
-                if (!_Stack.ContainsIndex(index))
-                {
-                    Console.WriteLine("Index not found in stack");
-                    return;
-                }
-
-                string newData = Inputty.GetString("New data:", null, true);
-                if (String.IsNullOrEmpty(newData)) return;
-
-                _Stack.UpdateAt(index, newData);
-                Console.WriteLine($"Item at index {index} updated successfully");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-        }
-
-        private static void Purge()
-        {
-            string key = Inputty.GetString("Key:", null, true);
-            if (String.IsNullOrEmpty(key)) return;
-
-            try
-            {
-                _Stack.Purge(key);
-                Console.WriteLine($"Key {key} purged from stack");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-        }
-
-        private static void RemoveAt()
-        {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            try
-            {
-                _Stack.RemoveAt(index);
-                Console.WriteLine($"Item at index {index} removed from stack");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
+                Console.WriteLine("Stack is empty");
             }
         }
 
@@ -342,24 +198,6 @@
             Console.WriteLine(contains ? "Item found in stack" : "Item not found in stack");
         }
 
-        private static void ContainsKey()
-        {
-            string key = Inputty.GetString("Key:", null, true);
-            if (String.IsNullOrEmpty(key)) return;
-
-            bool contains = _Stack.ContainsKey(key);
-            Console.WriteLine(contains ? "Key found in stack" : "Key not found in stack");
-        }
-
-        private static void ContainsIndex()
-        {
-            int index = Inputty.GetInteger("Index:", 0, true, true);
-            if (index < 0) return;
-
-            bool contains = _Stack.ContainsIndex(index);
-            Console.WriteLine(contains ? $"Index {index} exists in stack" : $"Index {index} does not exist in stack");
-        }
-
         private static void ToArray()
         {
             string[] array = _Stack.ToArray();
@@ -377,26 +215,43 @@
             }
         }
 
-        private static void ListKeys()
+        private static void CopyTo()
         {
-            List<string> keys = _Stack.GetKeys();
-
-            if (keys.Count == 0)
+            if (_Stack.Count == 0)
             {
                 Console.WriteLine("Stack is empty");
                 return;
             }
 
-            Console.WriteLine("");
-            Console.WriteLine($"Listing {keys.Count} keys in stack (newest to oldest):");
-
-            for (int i = 0; i < keys.Count; i++)
+            int arraySize = Inputty.GetInteger("Array size (must be >= stack size):", _Stack.Count, true, true);
+            if (arraySize < _Stack.Count)
             {
-                string key = keys[i];
-                Console.WriteLine($"[{i}]");
+                Console.WriteLine("Array size must be at least equal to the stack size");
+                return;
             }
 
-            Console.WriteLine("");
+            int startIndex = Inputty.GetInteger("Start index:", 0, true, true);
+            if (startIndex < 0 || startIndex + _Stack.Count > arraySize)
+            {
+                Console.WriteLine("Invalid start index. Stack items must fit in the array");
+                return;
+            }
+
+            string[] array = new string[arraySize];
+
+            // Initialize array with placeholder values
+            for (int i = 0; i < arraySize; i++)
+            {
+                array[i] = "[empty]";
+            }
+
+            _Stack.CopyTo(array, startIndex);
+
+            Console.WriteLine("Array after CopyTo operation:");
+            for (int i = 0; i < array.Length; i++)
+            {
+                Console.WriteLine($"[{i}]: {array[i]}");
+            }
         }
     }
 }
