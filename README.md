@@ -4,7 +4,7 @@
 
 [![NuGet Version](https://img.shields.io/nuget/v/PersistentCollection.svg?style=flat)](https://www.nuget.org/packages/PersistentCollection/) [![NuGet](https://img.shields.io/nuget/dt/PersistentCollection.svg)](https://www.nuget.org/packages/PersistentCollection) 
 
-Lightweight, persistent, thread-safe, disk-based collection classes written in C# for queue, stack, and list.  All classes leverage a temporary directory for storage to enable persistence across instantiations of the object or restarts of the software.
+Lightweight, persistent, thread-safe, disk-based collection classes written in C# for queue, stack, and list.  All classes leverage a file to enable persistence across instantiations of the object or restarts of the software.
 
 **IMPORTANT**:
 - To provide persistence, the internal data structure is persisted to disk *in full* any time a change is made
