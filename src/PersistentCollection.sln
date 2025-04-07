@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutomatedTest.All", "Automa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutomatedTest.PersistentDictionary", "AutomatedTest.PersistentDictionary\AutomatedTest.PersistentDictionary.csproj", "{F5B8A60E-0FDE-4C62-A4A8-12C16D9C745B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test.Dictionary", "Test.Dictionary\Test.Dictionary.csproj", "{726F1EC1-9BE9-4BD0-AD90-16BAFFAE9A91}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -63,6 +65,10 @@ Global
 		{F5B8A60E-0FDE-4C62-A4A8-12C16D9C745B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F5B8A60E-0FDE-4C62-A4A8-12C16D9C745B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F5B8A60E-0FDE-4C62-A4A8-12C16D9C745B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{726F1EC1-9BE9-4BD0-AD90-16BAFFAE9A91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{726F1EC1-9BE9-4BD0-AD90-16BAFFAE9A91}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{726F1EC1-9BE9-4BD0-AD90-16BAFFAE9A91}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{726F1EC1-9BE9-4BD0-AD90-16BAFFAE9A91}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
