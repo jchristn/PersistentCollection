@@ -386,51 +386,7 @@
             {
                 if (_List == null) _List = new List<T>();
                 else _List.Clear();
-
-                using (StreamReader reader = new StreamReader(_PersistenceFile))
-                {
-                    string line;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        // 1 { "foo": "bar" }
-                        // 2 
-                        // 3 { "hello": "world" }
-                        if (String.IsNullOrWhiteSpace(line)) continue;
-
-                        int spaceIndex = line.IndexOf(' ');
-                        if (spaceIndex == -1)
-                        {
-                            if (int.TryParse(line, out int id))
-                            {
-                                while (_List.Count <= id) _List.Add(default(T)); // Ensure list has enough capacity
-                                _List[id] = default(T);
-                            }
-                            continue;
-                        }
-                        else
-                        {
-                            if (!int.TryParse(line.Substring(0, spaceIndex), out int id))
-                                continue;
-
-                            string json = line.Substring(spaceIndex + 1).Trim();
-
-                            // Handle empty JSON part
-                            if (string.IsNullOrWhiteSpace(json))
-                            {
-                                while (_List.Count <= id)
-                                {
-                                    _List.Add(default(T));
-                                }
-                                _List[id] = default(T);
-                                continue;
-                            }
-
-                            T data = JsonSerializer.Deserialize<T>(json);
-                            while (_List.Count <= id) _List.Add(default(T)); // Ensure list has enough capacity
-                            _List[id] = data;
-                        }
-                    }
-                }
+                _List = JsonSerializer.Deserialize<List<T>>(File.ReadAllText(_PersistenceFile));
             }
         }
 
@@ -440,24 +396,7 @@
             {
                 string dir = Path.GetDirectoryName(_PersistenceFile);
                 if (!String.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-
-                using (StreamWriter writer = new StreamWriter(_PersistenceFile, false))
-                {
-                    for (int i = 0; i < _List.Count; i++)
-                    {
-                        T item = _List[i];
-                        writer.Write($"{i} ");
-                        if (item == null || EqualityComparer<T>.Default.Equals(item, default(T)))
-                        {
-                            writer.WriteLine();
-                        }
-                        else
-                        {
-                            string json = JsonSerializer.Serialize(item);
-                            writer.WriteLine(json);
-                        }
-                    }
-                }
+                File.WriteAllText(_PersistenceFile, JsonSerializer.Serialize(_List));
             }
         }
 
