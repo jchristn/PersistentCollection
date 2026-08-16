@@ -267,6 +267,85 @@ namespace Test.Shared
 
                     await Task.WhenAll(tasks).ConfigureAwait(false);
                     AssertEquals(100, queue.Count, "All concurrent enqueues should be counted.");
+                }),
+
+                new TestCaseDescriptor(s, "empty_to_array_is_empty", "ToArray on an empty queue returns an empty array", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    AssertEquals(0, queue.ToArray().Length, "ToArray on an empty queue should be empty.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "empty_enumeration_yields_nothing", "Enumerating an empty queue yields no items", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    AssertEquals(0, queue.ToList().Count, "An empty queue should enumerate no items.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "enumerator_is_snapshot", "An enumerator reflects the queue as it was when created", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    queue.Enqueue("Item1");
+                    queue.Enqueue("Item2");
+                    List<string> observed = new List<string>();
+                    using (IEnumerator<string> e = queue.GetEnumerator())
+                    {
+                        queue.Enqueue("Item3"); // mutate after acquiring the enumerator
+                        while (e.MoveNext()) observed.Add(e.Current);
+                    }
+                    AssertSequenceEquals(new[] { "Item1", "Item2" }, observed,
+                        "The enumerator should not observe items added after it was created.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "non_generic_copy_to", "The non-generic ICollection.CopyTo writes items in FIFO order", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    queue.Enqueue("Item1");
+                    queue.Enqueue("Item2");
+                    Array array = new string[2];
+                    ((System.Collections.ICollection)queue).CopyTo(array, 0);
+                    AssertEquals("Item1", (string)array.GetValue(0), "First element should be Item1.");
+                    AssertEquals("Item2", (string)array.GetValue(1), "Second element should be Item2.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "copy_to_null_throws", "CopyTo rejects a null array", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    queue.Enqueue("Item1");
+                    AssertThrows<ArgumentNullException>(() => queue.CopyTo((string[])null, 0),
+                        "CopyTo with a null array should throw ArgumentNullException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "copy_to_negative_index_throws", "CopyTo rejects a negative index", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    queue.Enqueue("Item1");
+                    AssertThrows<ArgumentOutOfRangeException>(() => queue.CopyTo(new string[2], -1),
+                        "CopyTo with a negative index should throw ArgumentOutOfRangeException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "sync_primitives", "SyncRoot and IsSynchronized are exposed", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    Assert(queue.IsSynchronized, "IsSynchronized should be true.");
+                    Assert(queue.SyncRoot != null, "SyncRoot should not be null.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "reusable_after_clear", "The queue is usable after Clear", _ =>
+                {
+                    using PersistentQueue<string> queue = new PersistentQueue<string>(NewFile(s));
+                    queue.Enqueue("Item1");
+                    queue.Clear();
+                    queue.Enqueue("Item2");
+                    AssertEquals(1, queue.Count, "Queue should accept items after Clear.");
+                    AssertEquals("Item2", queue.Peek(), "Head after Clear should be the newly enqueued item.");
+                    return Task.CompletedTask;
                 })
             };
 

@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1;net48;net8.0</TargetFrameworks>
-		<Version>2.0.13</Version>
+		<Version>2.1.0</Version>
 		<ApplicationIcon>Assets\icon.ico</ApplicationIcon>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<DocumentationFile>PersistentQueue.xml</DocumentationFile>
@@ -16,7 +16,7 @@
 		<RepositoryUrl>https://github.com/jchristn/PersistentQueue</RepositoryUrl>
 		<RepositoryType>github</RepositoryType>
 		<PackageTags>queue stack dictionary list persistent persistence disk</PackageTags>
-		<PackageReleaseNotes>Initial release</PackageReleaseNotes>
+		<PackageReleaseNotes>Updated System.Text.Json to 10.x. No public API changes.</PackageReleaseNotes>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
@@ -50,7 +50,7 @@
 
 	<ItemGroup>
 	  <PackageReference Include="SerializationHelper" Version="2.0.3" />
-	  <PackageReference Include="System.Text.Json" Version="9.0.3" />
+	  <PackageReference Include="System.Text.Json" Version="10.0.11" />
 	</ItemGroup>
 
 </Project>

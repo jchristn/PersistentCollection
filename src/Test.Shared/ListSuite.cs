@@ -311,6 +311,78 @@ namespace Test.Shared
 
                     await Task.WhenAll(tasks).ConfigureAwait(false);
                     AssertEquals(100, list.Count, "All concurrent adds should be counted.");
+                }),
+
+                new TestCaseDescriptor(s, "empty_enumeration_yields_nothing", "Enumerating an empty list yields no items", _ =>
+                {
+                    using PersistentList<string> list = new PersistentList<string>(NewFile(s));
+                    AssertEquals(0, list.ToList().Count, "An empty list should enumerate no items.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "enumerator_is_snapshot", "An enumerator reflects the list as it was when created", _ =>
+                {
+                    using PersistentList<string> list = new PersistentList<string>(NewFile(s));
+                    list.Add("Item1");
+                    list.Add("Item2");
+                    List<string> observed = new List<string>();
+                    using (IEnumerator<string> e = list.GetEnumerator())
+                    {
+                        list.Add("Item3"); // mutate after acquiring the enumerator
+                        while (e.MoveNext()) observed.Add(e.Current);
+                    }
+                    AssertSequenceEquals(new[] { "Item1", "Item2" }, observed,
+                        "The enumerator should not observe items added after it was created.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "indexer_set_out_of_range_throws", "Setting an out-of-range index throws", _ =>
+                {
+                    using PersistentList<string> list = new PersistentList<string>(NewFile(s));
+                    list.Add("Item1");
+                    AssertThrows<ArgumentOutOfRangeException>(() => { list[5] = "x"; },
+                        "Setting an out-of-bounds index should throw ArgumentOutOfRangeException.");
+                    AssertThrows<ArgumentOutOfRangeException>(() => { list[-1] = "x"; },
+                        "Setting a negative index should throw ArgumentOutOfRangeException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "copy_to_null_throws", "CopyTo rejects a null array", _ =>
+                {
+                    using PersistentList<string> list = new PersistentList<string>(NewFile(s));
+                    list.Add("Item1");
+                    AssertThrows<ArgumentNullException>(() => list.CopyTo(null, 0),
+                        "CopyTo with a null array should throw ArgumentNullException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "copy_to_insufficient_space_throws", "CopyTo rejects an undersized array", _ =>
+                {
+                    using PersistentList<string> list = new PersistentList<string>(NewFile(s));
+                    list.Add("Item1");
+                    list.Add("Item2");
+                    AssertThrows<ArgumentException>(() => list.CopyTo(new string[1], 0),
+                        "CopyTo into an undersized array should throw ArgumentException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "sync_primitives", "SyncRoot and IsSynchronized are exposed", _ =>
+                {
+                    using PersistentList<string> list = new PersistentList<string>(NewFile(s));
+                    Assert(list.IsSynchronized, "IsSynchronized should be true.");
+                    Assert(list.SyncRoot != null, "SyncRoot should not be null.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "reusable_after_clear", "The list is usable after Clear", _ =>
+                {
+                    using PersistentList<string> list = new PersistentList<string>(NewFile(s));
+                    list.Add("Item1");
+                    list.Clear();
+                    list.Add("Item2");
+                    AssertEquals(1, list.Count, "List should accept items after Clear.");
+                    AssertEquals("Item2", list[0], "First item after Clear should be the newly added item.");
+                    return Task.CompletedTask;
                 })
             };
 

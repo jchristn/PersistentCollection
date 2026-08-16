@@ -328,6 +328,78 @@ namespace Test.Shared
 
                     await Task.WhenAll(tasks).ConfigureAwait(false);
                     AssertEquals(50, dict.Count, "All concurrent adds of distinct keys should be counted.");
+                }),
+
+                new TestCaseDescriptor(s, "empty_enumeration_yields_nothing", "Enumerating an empty dictionary yields no entries", _ =>
+                {
+                    using PersistentDictionary<string, string> dict = new PersistentDictionary<string, string>(NewFile(s));
+                    int count = 0;
+                    foreach (KeyValuePair<string, string> kvp in dict) count++;
+                    AssertEquals(0, count, "An empty dictionary should enumerate no entries.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "enumerator_is_snapshot", "An enumerator reflects the dictionary as it was when created", _ =>
+                {
+                    using PersistentDictionary<string, string> dict = new PersistentDictionary<string, string>(NewFile(s));
+                    dict.Add("Key1", "Value1");
+                    dict.Add("Key2", "Value2");
+                    int observed = 0;
+                    using (IEnumerator<KeyValuePair<string, string>> e = dict.GetEnumerator())
+                    {
+                        dict.Add("Key3", "Value3"); // mutate after acquiring the enumerator
+                        while (e.MoveNext()) observed++;
+                    }
+                    AssertEquals(2, observed, "The enumerator should not observe entries added after it was created.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "keys_values_are_snapshots", "Keys and Values are independent of later mutations", _ =>
+                {
+                    using PersistentDictionary<string, string> dict = new PersistentDictionary<string, string>(NewFile(s));
+                    dict.Add("Key1", "Value1");
+                    ICollection<string> keys = dict.Keys;
+                    ICollection<string> values = dict.Values;
+                    dict.Add("Key2", "Value2");
+                    AssertEquals(1, keys.Count, "A previously returned Keys collection should not change when the dictionary grows.");
+                    AssertEquals(1, values.Count, "A previously returned Values collection should not change when the dictionary grows.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "add_duplicate_kvp_throws", "Adding a duplicate key via a pair throws", _ =>
+                {
+                    using PersistentDictionary<string, string> dict = new PersistentDictionary<string, string>(NewFile(s));
+                    dict.Add("Key1", "Value1");
+                    AssertThrows<ArgumentException>(() => dict.Add(new KeyValuePair<string, string>("Key1", "Value2")),
+                        "Adding a duplicate key via a key-value pair should throw ArgumentException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "indexer_set_null_key_throws", "Setting a null key via the indexer throws", _ =>
+                {
+                    using PersistentDictionary<string, string> dict = new PersistentDictionary<string, string>(NewFile(s));
+                    AssertThrows<ArgumentNullException>(() => { dict[null] = "Value"; },
+                        "Setting a null key via the indexer should throw ArgumentNullException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "sync_primitives", "SyncRoot and IsSynchronized are exposed", _ =>
+                {
+                    using PersistentDictionary<string, string> dict = new PersistentDictionary<string, string>(NewFile(s));
+                    Assert(dict.IsSynchronized, "IsSynchronized should be true.");
+                    Assert(dict.SyncRoot != null, "SyncRoot should not be null.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "reusable_after_clear", "The dictionary is usable after Clear", _ =>
+                {
+                    using PersistentDictionary<string, string> dict = new PersistentDictionary<string, string>(NewFile(s));
+                    dict.Add("Key1", "Value1");
+                    dict.Clear();
+                    dict.Add("Key2", "Value2");
+                    AssertEquals(1, dict.Count, "Dictionary should accept entries after Clear.");
+                    AssertEquals("Value2", dict["Key2"], "Value after Clear should be the newly added entry.");
+                    return Task.CompletedTask;
                 })
             };
 

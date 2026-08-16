@@ -270,6 +270,76 @@ namespace Test.Shared
 
                     await Task.WhenAll(tasks).ConfigureAwait(false);
                     AssertEquals(100, stack.Count, "All concurrent pushes should be counted.");
+                }),
+
+                new TestCaseDescriptor(s, "empty_to_array_is_empty", "ToArray on an empty stack returns an empty array", _ =>
+                {
+                    using PersistentStack<string> stack = new PersistentStack<string>(NewFile(s));
+                    AssertEquals(0, stack.ToArray().Length, "ToArray on an empty stack should be empty.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "empty_enumeration_yields_nothing", "Enumerating an empty stack yields no items", _ =>
+                {
+                    using PersistentStack<string> stack = new PersistentStack<string>(NewFile(s));
+                    AssertEquals(0, stack.ToList().Count, "An empty stack should enumerate no items.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "enumerator_is_snapshot", "An enumerator reflects the stack as it was when created", _ =>
+                {
+                    using PersistentStack<string> stack = new PersistentStack<string>(NewFile(s));
+                    stack.Push("Item1");
+                    stack.Push("Item2");
+                    List<string> observed = new List<string>();
+                    using (IEnumerator<string> e = stack.GetEnumerator())
+                    {
+                        stack.Push("Item3"); // mutate after acquiring the enumerator
+                        while (e.MoveNext()) observed.Add(e.Current);
+                    }
+                    AssertSequenceEquals(new[] { "Item2", "Item1" }, observed,
+                        "The enumerator should not observe items pushed after it was created (top first).");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "non_generic_copy_to", "The non-generic ICollection.CopyTo writes items top-first", _ =>
+                {
+                    using PersistentStack<string> stack = new PersistentStack<string>(NewFile(s));
+                    stack.Push("Item1");
+                    stack.Push("Item2");
+                    Array array = new string[2];
+                    ((System.Collections.ICollection)stack).CopyTo(array, 0);
+                    AssertEquals("Item2", (string)array.GetValue(0), "First element should be the top (Item2).");
+                    AssertEquals("Item1", (string)array.GetValue(1), "Second element should be Item1.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "copy_to_null_throws", "CopyTo rejects a null array", _ =>
+                {
+                    using PersistentStack<string> stack = new PersistentStack<string>(NewFile(s));
+                    stack.Push("Item1");
+                    AssertThrows<ArgumentNullException>(() => stack.CopyTo((string[])null, 0),
+                        "CopyTo with a null array should throw ArgumentNullException.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "sync_primitives", "SyncRoot and IsSynchronized are exposed", _ =>
+                {
+                    using PersistentStack<string> stack = new PersistentStack<string>(NewFile(s));
+                    Assert(stack.IsSynchronized, "IsSynchronized should be true.");
+                    Assert(stack.SyncRoot != null, "SyncRoot should not be null.");
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor(s, "reusable_after_clear", "The stack is usable after Clear", _ =>
+                {
+                    using PersistentStack<string> stack = new PersistentStack<string>(NewFile(s));
+                    stack.Push("Item1");
+                    stack.Clear();
+                    stack.Push("Item2");
+                    AssertEquals(1, stack.Count, "Stack should accept items after Clear.");
+                    AssertEquals("Item2", stack.Peek(), "Top after Clear should be the newly pushed item.");
+                    return Task.CompletedTask;
                 })
             };
 
