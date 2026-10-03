@@ -16,6 +16,7 @@ Lightweight, persistent, thread-safe, disk-based collection classes written in C
 - Built-in observability: metrics and traces via `System.Diagnostics` `Meter` and `ActivitySource`, both named `PersistentCollection` (no exporter dependency, near-zero cost when nothing is listening)
 - Operation latency and outcome, lock wait, disk persistence latency and file size, queue/stack depth, and errors by type
 - See [TELEMETRY.md](TELEMETRY.md) for the full metrics and spans catalog, subscription examples, and recommended alerts
+- v2.2.1: dependency updates (`SerializationHelper` 2.1.0, `System.Text.Json` 10.0.12); no public API changes
 
 ## New in v2.0.x
 

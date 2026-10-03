@@ -284,6 +284,28 @@ namespace Test.Shared
                     return Task.CompletedTask;
                 }),
 
+                new TestCaseDescriptor(s, "persistence_serialization_roundtrip", "Complex values and special characters survive a JSON round-trip", _ =>
+                {
+                    string file = NewFile(s);
+                    string tricky = "quote\" backslash\\ tab\t newline\n unicode é中\U0001F600 <html>&'";
+                    using (PersistentDictionary<string, Person> dict = new PersistentDictionary<string, Person>(file))
+                    {
+                        dict.Add(tricky, new Person { Name = tricky, Age = int.MaxValue });
+                        dict.Add("null-name", new Person { Name = null, Age = -1 });
+                        dict.Add(string.Empty, new Person { Name = string.Empty, Age = 0 });
+                    }
+
+                    using (PersistentDictionary<string, Person> reopened = new PersistentDictionary<string, Person>(file))
+                    {
+                        AssertEquals(3, reopened.Count, "Reopened dictionary should have all entries.");
+                        AssertEquals(new Person { Name = tricky, Age = int.MaxValue }, reopened[tricky], "Special characters should round-trip in keys and values.");
+                        AssertEquals(new Person { Name = null, Age = -1 }, reopened["null-name"], "Null members should round-trip.");
+                        AssertEquals(new Person { Name = string.Empty, Age = 0 }, reopened[string.Empty], "Empty strings should round-trip.");
+                    }
+
+                    return Task.CompletedTask;
+                }),
+
                 new TestCaseDescriptor(s, "persistence_after_modifications", "Modifications persist across instances", _ =>
                 {
                     string file = NewFile(s);

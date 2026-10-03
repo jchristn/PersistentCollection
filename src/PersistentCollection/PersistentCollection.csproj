@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1;net48;net8.0</TargetFrameworks>
-		<Version>2.2.0</Version>
+		<Version>2.2.1</Version>
 		<LangVersion>latest</LangVersion>
 		<ApplicationIcon>Assets\icon.ico</ApplicationIcon>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
@@ -17,7 +17,7 @@
 		<RepositoryUrl>https://github.com/jchristn/PersistentQueue</RepositoryUrl>
 		<RepositoryType>github</RepositoryType>
 		<PackageTags>queue stack dictionary list persistent persistence disk opentelemetry metrics tracing</PackageTags>
-		<PackageReleaseNotes>Built-in OpenTelemetry-compatible metrics and traces via System.Diagnostics Meter and ActivitySource named PersistentCollection. See TELEMETRY.md.</PackageReleaseNotes>
+		<PackageReleaseNotes>Dependency updates: SerializationHelper 2.1.0, System.Text.Json 10.0.12. Built-in OpenTelemetry-compatible metrics and traces via System.Diagnostics Meter and ActivitySource named PersistentCollection. See TELEMETRY.md.</PackageReleaseNotes>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
@@ -50,9 +50,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="SerializationHelper" Version="2.0.3" />
+	  <PackageReference Include="SerializationHelper" Version="2.1.0" />
 	  <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="10.0.12" />
-	  <PackageReference Include="System.Text.Json" Version="10.0.11" />
+	  <PackageReference Include="System.Text.Json" Version="10.0.12" />
 	</ItemGroup>
 
 </Project>
