@@ -11,6 +11,12 @@ Lightweight, persistent, thread-safe, disk-based collection classes written in C
 - Thus, this library is NOT APPROPRIATE for large amounts of data or a large number of records
 - It is recommended that these classes be used sparingly, when record counts are less than 1000 and total size is less than 10MB
 
+## New in v2.2.x
+
+- Built-in observability: metrics and traces via `System.Diagnostics` `Meter` and `ActivitySource`, both named `PersistentCollection` (no exporter dependency, near-zero cost when nothing is listening)
+- Operation latency and outcome, lock wait, disk persistence latency and file size, queue/stack depth, and errors by type
+- See [TELEMETRY.md](TELEMETRY.md) for the full metrics and spans catalog, subscription examples, and recommended alerts
+
 ## New in v2.0.x
 
 - Remove expiration
@@ -73,6 +79,28 @@ myDict.Add("name", "Joel");
 myDict.Add("hobbies", "code");
 string val = myDict["name"]; // Joel
 ```
+
+## Observability
+
+PersistentCollection emits OpenTelemetry-compatible metrics and traces through the BCL `System.Diagnostics` APIs. It takes no dependency on any exporter. Subscribe your host's collector to the `PersistentCollection` meter and activity source, for example with Radiant:
+
+```csharp
+using PersistentCollection;
+
+settings.Sources.AddMeter(PersistentCollectionTelemetry.MeterName);
+settings.Sources.AddActivitySource(PersistentCollectionTelemetry.ActivitySourceName);
+```
+
+Or with the OpenTelemetry SDK: `.AddMeter(PersistentCollectionTelemetry.MeterName)` and `.AddSource(PersistentCollectionTelemetry.ActivitySourceName)`.
+
+You then get, for example:
+
+- `persistentcollection_operation_duration_seconds` per collection type, operation, and outcome
+- `persistentcollection_persistence_duration_seconds` and `persistentcollection_persistence_size_bytes`, which show the cost of each full-file rewrite
+- `persistentcollection_items` (queue and stack depth) and `persistentcollection_errors_total` by `error_type`
+- spans such as `PersistentQueue enqueue` → `PersistentQueue persistence.write`, which nest under your request or job span
+
+Refer to [TELEMETRY.md](TELEMETRY.md) for the complete catalog, PromQL alerts, and suggested dashboard panels.
 
 ## Version History
 

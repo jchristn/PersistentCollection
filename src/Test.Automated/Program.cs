@@ -68,7 +68,7 @@ namespace Test.Automated
             Console.WriteLine("  dotnet run --project src/Test.Automated/Test.Automated.csproj -- --suite queue");
             Console.WriteLine("  dotnet run --project src/Test.Automated/Test.Automated.csproj -- --suite list --test remove_at");
             Console.WriteLine();
-            Console.WriteLine("Suites: queue, stack, list, dictionary");
+            Console.WriteLine("Suites: queue, stack, list, dictionary, telemetry");
         }
 
         private static string ReadOption(string[] args, string name)

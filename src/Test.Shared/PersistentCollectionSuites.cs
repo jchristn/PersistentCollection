@@ -11,7 +11,7 @@ namespace Test.Shared
     public static partial class PersistentCollectionSuites
     {
         /// <summary>
-        /// All shared suites covering PersistentQueue, PersistentStack, PersistentList, and PersistentDictionary.
+        /// All shared suites covering PersistentQueue, PersistentStack, PersistentList, PersistentDictionary, and telemetry emission.
         /// </summary>
         public static IReadOnlyList<TestSuiteDescriptor> All
         {
@@ -22,7 +22,8 @@ namespace Test.Shared
                     QueueSuite(),
                     StackSuite(),
                     ListSuite(),
-                    DictionarySuite()
+                    DictionarySuite(),
+                    TelemetrySuite()
                 };
             }
         }

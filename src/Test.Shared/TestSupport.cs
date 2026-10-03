@@ -13,9 +13,11 @@ namespace Test.Shared
     {
         /// <summary>
         /// Root directory beneath which every suite gets an isolated working directory.
+        /// Scoped by process id so test hosts that run concurrently (for example dotnet test running the
+        /// xUnit and NUnit hosts for several frameworks at once) never clean each other's files.
         /// </summary>
         internal static readonly string BaseDirectory =
-            Path.Combine(Path.GetTempPath(), "PersistentCollectionTests");
+            Path.Combine(Path.GetTempPath(), "PersistentCollectionTests", Environment.ProcessId.ToString());
 
         /// <summary>
         /// Create a unique persistence file path within a suite's working directory.

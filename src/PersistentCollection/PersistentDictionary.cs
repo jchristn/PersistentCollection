@@ -141,7 +141,10 @@
 
         #region Private-Members
 
+        private const string _CollectionType = PersistentCollectionTelemetry.CollectionTypeDictionary;
+
         private string _PersistenceFile = null;
+        private string _FileName = null;
         private Dictionary<TKey, TValue> _Dictionary = new Dictionary<TKey, TValue>();
 
         private readonly object _PersistenceFileLock = new object();
@@ -162,8 +165,23 @@
             if (String.IsNullOrEmpty(persistenceFile)) throw new ArgumentNullException(nameof(persistenceFile));
 
             _PersistenceFile = persistenceFile;
+            _FileName = Path.GetFileName(persistenceFile);
 
-            if (File.Exists(_PersistenceFile)) PopulateFromFile();
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "open", "PersistentDictionary open"))
+            {
+                try
+                {
+                    if (File.Exists(_PersistenceFile)) PopulateFromFile();
+                    scope?.SetItemCount(_Dictionary.Count);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+            }
+
+            CollectionTelemetry.AddInstance(_CollectionType, 1);
+            CollectionTelemetry.AddItems(_CollectionType, _Dictionary.Count);
         }
 
         #endregion
@@ -174,14 +192,22 @@
         {
             get
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "count", null))
                 {
-                    _Semaphore.Wait();
-                    return _Dictionary.Count;
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        return _Dictionary.Count;
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
         }
@@ -198,14 +224,22 @@
         {
             get
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "keys", null))
                 {
-                    _Semaphore.Wait();
-                    return _Dictionary.Keys.ToList();
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        return _Dictionary.Keys.ToList();
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
         }
@@ -214,14 +248,22 @@
         {
             get
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "values", null))
                 {
-                    _Semaphore.Wait();
-                    return _Dictionary.Values.ToList();
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        return _Dictionary.Values.ToList();
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
         }
@@ -230,163 +272,277 @@
         {
             get
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "get", null))
                 {
-                    _Semaphore.Wait();
-                    return _Dictionary[key];
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        return _Dictionary[key];
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
             set
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "set", "PersistentDictionary set"))
                 {
-                    _Semaphore.Wait();
-                    _Dictionary[key] = value;
-                    RewritePersistenceFile();
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        bool existed = _Dictionary.ContainsKey(key);
+                        _Dictionary[key] = value;
+                        if (!existed) CollectionTelemetry.AddItems(_CollectionType, 1);
+                        RewritePersistenceFile();
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
         }
 
         void IDictionary<TKey, TValue>.Add(TKey key, TValue value)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "add", "PersistentDictionary add"))
             {
-                _Semaphore.Wait();
-                _Dictionary.Add(key, value);
-                RewritePersistenceFile();
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    _Dictionary.Add(key, value);
+                    CollectionTelemetry.AddItems(_CollectionType, 1);
+                    RewritePersistenceFile();
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "add", "PersistentDictionary add"))
             {
-                _Semaphore.Wait();
-                _Dictionary.Add(item.Key, item.Value);
-                RewritePersistenceFile();
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    _Dictionary.Add(item.Key, item.Value);
+                    CollectionTelemetry.AddItems(_CollectionType, 1);
+                    RewritePersistenceFile();
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void ICollection<KeyValuePair<TKey, TValue>>.Clear()
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "clear", "PersistentDictionary clear"))
             {
-                _Semaphore.Wait();
-                _Dictionary.Clear();
-                ClearPersistenceFile();
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    CollectionTelemetry.AddItems(_CollectionType, -_Dictionary.Count);
+                    _Dictionary.Clear();
+                    ClearPersistenceFile();
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "contains", null))
             {
-                _Semaphore.Wait();
-                return _Dictionary.ContainsKey(item.Key) &&
-                       EqualityComparer<TValue>.Default.Equals(_Dictionary[item.Key], item.Value);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    return _Dictionary.ContainsKey(item.Key) &&
+                           EqualityComparer<TValue>.Default.Equals(_Dictionary[item.Key], item.Value);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         bool IDictionary<TKey, TValue>.ContainsKey(TKey key)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "contains_key", null))
             {
-                _Semaphore.Wait();
-                return _Dictionary.ContainsKey(key);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    return _Dictionary.ContainsKey(key);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "copy_to", null))
             {
-                _Semaphore.Wait();
-                foreach (var kvp in _Dictionary)
+                try
                 {
-                    array[arrayIndex++] = kvp;
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    foreach (KeyValuePair<TKey, TValue> kvp in _Dictionary)
+                    {
+                        array[arrayIndex++] = kvp;
+                    }
                 }
-            }
-            finally
-            {
-                _Semaphore.Release();
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "remove", "PersistentDictionary remove"))
             {
-                _Semaphore.Wait();
-
-                if (!_Dictionary.TryGetValue(item.Key, out var value) ||
-                    !EqualityComparer<TValue>.Default.Equals(value, item.Value))
+                try
                 {
-                    return false;
-                }
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
 
-                bool result = _Dictionary.Remove(item.Key);
-                if (result) RewritePersistenceFile();
-                return result;
-            }
-            finally
-            {
-                _Semaphore.Release();
+                    if (!_Dictionary.TryGetValue(item.Key, out TValue value) ||
+                        !EqualityComparer<TValue>.Default.Equals(value, item.Value))
+                    {
+                        scope?.MarkMiss();
+                        return false;
+                    }
+
+                    bool result = _Dictionary.Remove(item.Key);
+                    if (result)
+                    {
+                        CollectionTelemetry.AddItems(_CollectionType, -1);
+                        RewritePersistenceFile();
+                    }
+                    else
+                    {
+                        scope?.MarkMiss();
+                    }
+
+                    return result;
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         bool IDictionary<TKey, TValue>.Remove(TKey key)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "remove", "PersistentDictionary remove"))
             {
-                _Semaphore.Wait();
-                bool result = _Dictionary.Remove(key);
-                if (result) RewritePersistenceFile();
-                return result;
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    bool result = _Dictionary.Remove(key);
+                    if (result)
+                    {
+                        CollectionTelemetry.AddItems(_CollectionType, -1);
+                        RewritePersistenceFile();
+                    }
+                    else
+                    {
+                        scope?.MarkMiss();
+                    }
+
+                    return result;
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         bool IDictionary<TKey, TValue>.TryGetValue(TKey key, out TValue value)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "try_get_value", null))
             {
-                _Semaphore.Wait();
-                return _Dictionary.TryGetValue(key, out value);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    bool found = _Dictionary.TryGetValue(key, out value);
+                    if (!found) scope?.MarkMiss();
+                    return found;
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
@@ -394,14 +550,22 @@
         {
             Dictionary<TKey, TValue> snapshot;
 
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "enumerate", null))
             {
-                _Semaphore.Wait();
-                snapshot = new Dictionary<TKey, TValue>(_Dictionary);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    snapshot = new Dictionary<TKey, TValue>(_Dictionary);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
 
             return snapshot.GetEnumerator();
@@ -426,7 +590,12 @@
             {
                 if (disposing)
                 {
-                    if (_Dictionary != null) _Dictionary.Clear();
+                    CollectionTelemetry.AddInstance(_CollectionType, -1);
+                    if (_Dictionary != null)
+                    {
+                        CollectionTelemetry.AddItems(_CollectionType, -_Dictionary.Count);
+                        _Dictionary.Clear();
+                    }
                     _Semaphore?.Dispose();
                 }
 
@@ -451,39 +620,78 @@
 
         private void PopulateFromFile()
         {
-            lock (_PersistenceFileLock)
+            using (TelemetryScope scope = TelemetryScope.Persistence(_CollectionType, PersistentCollectionTelemetry.PersistenceRead, "PersistentDictionary persistence.read", _FileName))
             {
-                if (_Dictionary == null) _Dictionary = new Dictionary<TKey, TValue>();
-                else _Dictionary.Clear();
+                try
+                {
+                    lock (_PersistenceFileLock)
+                    {
+                        if (_Dictionary == null) _Dictionary = new Dictionary<TKey, TValue>();
+                        else _Dictionary.Clear();
 
-                if (File.Exists(_PersistenceFile))
-                {
-                    _Dictionary = new Dictionary<TKey, TValue>(JsonSerializer.Deserialize<Dictionary<TKey, TValue>>(File.ReadAllText(_PersistenceFile)));
+                        if (File.Exists(_PersistenceFile))
+                        {
+                            string json = File.ReadAllText(_PersistenceFile);
+                            scope?.SetBytes(Encoding.UTF8.GetByteCount(json));
+                            _Dictionary = new Dictionary<TKey, TValue>(JsonSerializer.Deserialize<Dictionary<TKey, TValue>>(json));
+                        }
+                        else
+                        {
+                            _Dictionary = new Dictionary<TKey, TValue>();
+                        }
+                    }
+
+                    scope?.SetItemCount(_Dictionary.Count);
                 }
-                else
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
                 {
-                    _Dictionary = new Dictionary<TKey, TValue>();
+                    throw;
                 }
             }
         }
 
         private void RewritePersistenceFile()
         {
-            lock (_PersistenceFileLock)
+            using (TelemetryScope scope = TelemetryScope.Persistence(_CollectionType, PersistentCollectionTelemetry.PersistenceWrite, "PersistentDictionary persistence.write", _FileName))
             {
-                string dir = Path.GetDirectoryName(_PersistenceFile);
-                if (!String.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllText(_PersistenceFile, JsonSerializer.Serialize(_Dictionary));
+                try
+                {
+                    lock (_PersistenceFileLock)
+                    {
+                        string dir = Path.GetDirectoryName(_PersistenceFile);
+                        if (!String.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(_Dictionary);
+                        File.WriteAllBytes(_PersistenceFile, bytes);
+
+                        scope?.SetBytes(bytes.Length);
+                        scope?.SetItemCount(_Dictionary.Count);
+                    }
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
             }
         }
 
         private void ClearPersistenceFile()
         {
-            lock (_PersistenceFileLock)
+            using (TelemetryScope scope = TelemetryScope.Persistence(_CollectionType, PersistentCollectionTelemetry.PersistenceTruncate, "PersistentDictionary persistence.truncate", _FileName))
             {
-                using (StreamWriter writer = new StreamWriter(_PersistenceFile, false))
+                try
                 {
-                    // write nothing
+                    lock (_PersistenceFileLock)
+                    {
+                        using (StreamWriter writer = new StreamWriter(_PersistenceFile, false))
+                        {
+                            // write nothing
+                        }
+                    }
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
                 }
             }
         }

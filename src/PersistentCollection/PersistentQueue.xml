@@ -4,6 +4,184 @@
         <name>PersistentCollection</name>
     </assembly>
     <members>
+        <member name="T:PersistentCollection.CollectionTelemetry">
+            <summary>
+            Process-wide Meter, ActivitySource, and instruments for PersistentCollection.
+            Every recording method is best-effort: it never throws, and it does nothing when no listener is subscribed.
+            </summary>
+        </member>
+        <member name="T:PersistentCollection.PersistentCollectionTelemetry">
+            <summary>
+            Stable public names for the telemetry emitted by PersistentCollection.
+            The library emits through the BCL System.Diagnostics.Metrics.Meter and System.Diagnostics.ActivitySource
+            APIs only, and takes no dependency on any exporter. When no listener is subscribed, emission is effectively free.
+            A host subscribes by name, for example with Radiant: settings.Sources.AddMeter(PersistentCollectionTelemetry.MeterName)
+            and settings.Sources.AddActivitySource(PersistentCollectionTelemetry.ActivitySourceName), or with the OpenTelemetry SDK:
+            AddMeter(PersistentCollectionTelemetry.MeterName) and AddSource(PersistentCollectionTelemetry.ActivitySourceName).
+            These names, the metric names, and the attribute keys below are public contract. Dashboards and alerts depend on them.
+            This class is thread-safe; it contains only constants.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.MeterName">
+            <summary>
+            Name of the Meter that emits all PersistentCollection metrics.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.ActivitySourceName">
+            <summary>
+            Name of the ActivitySource that emits all PersistentCollection spans.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.OperationDuration">
+            <summary>
+            Histogram, unit seconds. Duration of each public collection operation, including lock wait and any disk persistence.
+            Labels: collection.type, operation, outcome, and error.type (only when outcome is error).
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.LockWaitDuration">
+            <summary>
+            Histogram, unit seconds. Time spent waiting to acquire the per-instance lock before an operation could run.
+            Labels: collection.type, operation.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.PersistenceDuration">
+            <summary>
+            Histogram, unit seconds. Duration of a disk persistence step (read on open, full rewrite on mutation, truncate on clear).
+            Labels: collection.type, operation (read, write, truncate), outcome, and error.type (only when outcome is error).
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.PersistenceSize">
+            <summary>
+            Histogram, unit bytes. Size of the persistence file read on open or written on mutation.
+            Labels: collection.type, operation (read, write).
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.PersistenceLastSuccess">
+            <summary>
+            Gauge, unit seconds (Unix time). Time of the most recent successful persistence write or truncate in this process.
+            Labels: collection.type.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.Errors">
+            <summary>
+            Counter, unit {error}. Failed public operations.
+            Labels: collection.type, operation, error.type.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.Items">
+            <summary>
+            UpDownCounter, unit {item}. Items currently held in memory across all live instances in this process (queue depth for queues).
+            Labels: collection.type.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.Instances">
+            <summary>
+            UpDownCounter, unit {instance}. Live (opened and not yet disposed) collection instances in this process.
+            Labels: collection.type.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.BuildInfo">
+            <summary>
+            Gauge, always 1. Identifies the library version loaded in this process.
+            Labels: version.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.CollectionTypeKey">
+            <summary>
+            Attribute key for the collection type. Values: list, queue, stack, dictionary.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.OperationKey">
+            <summary>
+            Attribute key for the operation name, for example enqueue, dequeue, add, open, or (for persistence) read, write, truncate.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.OutcomeKey">
+            <summary>
+            Attribute key for the operation outcome. Values: success, miss, error.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.ErrorTypeKey">
+            <summary>
+            Attribute key for the error type, set to the full name of the exception type when outcome is error.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.VersionKey">
+            <summary>
+            Attribute key for the library version on the build info gauge.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.FileNameKey">
+            <summary>
+            Span-only attribute key for the persistence file name (file name only, never the full path).
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.ItemCountKey">
+            <summary>
+            Span-only attribute key for the item count after the operation or persistence step.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.BytesKey">
+            <summary>
+            Span-only attribute key for the number of bytes read or written by a persistence step.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.LockWaitKey">
+            <summary>
+            Span-only attribute key for the lock wait time in seconds before the operation could run.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.CollectionTypeList">
+            <summary>
+            Collection type value for PersistentList.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.CollectionTypeQueue">
+            <summary>
+            Collection type value for PersistentQueue.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.CollectionTypeStack">
+            <summary>
+            Collection type value for PersistentStack.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.CollectionTypeDictionary">
+            <summary>
+            Collection type value for PersistentDictionary.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.OutcomeSuccess">
+            <summary>
+            Outcome value: the operation completed and did what was asked.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.OutcomeMiss">
+            <summary>
+            Outcome value: the operation completed normally but its target was absent
+            (for example TryDequeue on an empty queue, or Remove of a missing key).
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.OutcomeError">
+            <summary>
+            Outcome value: the operation threw an exception.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.PersistenceRead">
+            <summary>
+            Persistence operation value: the persistence file was read and deserialized on open.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.PersistenceWrite">
+            <summary>
+            Persistence operation value: the full collection was serialized and the persistence file rewritten.
+            </summary>
+        </member>
+        <member name="F:PersistentCollection.PersistentCollectionTelemetry.PersistenceTruncate">
+            <summary>
+            Persistence operation value: the persistence file was truncated by Clear.
+            </summary>
+        </member>
         <member name="T:PersistentCollection.PersistentDictionary`2">
             <summary>
             Persistent dictionary. Dictionary entries are backed on disk.
@@ -468,6 +646,13 @@
             </summary>
             <param name="item">Item.</param>
             <returns>True if successful.</returns>
+        </member>
+        <member name="T:PersistentCollection.TelemetryScope">
+            <summary>
+            Times one collection operation or persistence step, tracks its outcome, and owns its span.
+            Factories return null when nothing is listening, so callers use the null-conditional operator.
+            Every member is best-effort and never throws. Not thread-safe; one scope belongs to one call.
+            </summary>
         </member>
     </members>
 </doc>

@@ -122,7 +122,10 @@
 
         #region Private-Members
 
+        private const string _CollectionType = PersistentCollectionTelemetry.CollectionTypeList;
+
         private string _PersistenceFile = null;
+        private string _FileName = null;
         private List<T> _List = new List<T>();
 
         private readonly object _PersistenceFileLock = new object();
@@ -143,8 +146,23 @@
             if (String.IsNullOrEmpty(persistenceFile)) throw new ArgumentNullException(nameof(persistenceFile));
 
             _PersistenceFile = persistenceFile;
+            _FileName = Path.GetFileName(persistenceFile);
 
-            if (File.Exists(_PersistenceFile)) PopulateFromFile();
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "open", "PersistentList open"))
+            {
+                try
+                {
+                    if (File.Exists(_PersistenceFile)) PopulateFromFile();
+                    scope?.SetItemCount(_List.Count);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+            }
+
+            CollectionTelemetry.AddInstance(_CollectionType, 1);
+            CollectionTelemetry.AddItems(_CollectionType, _List.Count);
         }
 
         #endregion
@@ -155,14 +173,22 @@
         {
             get
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "count", null))
                 {
-                    _Semaphore.Wait();
-                    return _List.Count;
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        return _List.Count;
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
         }
@@ -179,145 +205,231 @@
         {
             get
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "get", null))
                 {
-                    _Semaphore.Wait();
-                    return _List[index];
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        return _List[index];
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
             set
             {
-                try
+                using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "set", "PersistentList set"))
                 {
-                    _Semaphore.Wait();
-                    _List[index] = value;
-                    RewritePersistenceFile();
-                }
-                finally
-                {
-                    _Semaphore.Release();
+                    try
+                    {
+                        _Semaphore.Wait();
+                        scope?.LockAcquired();
+                        _List[index] = value;
+                        RewritePersistenceFile();
+                    }
+                    catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        _Semaphore.Release();
+                    }
                 }
             }
         }
 
         int IList<T>.IndexOf(T item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "index_of", null))
             {
-                _Semaphore.Wait();
-                return _List.IndexOf(item);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    return _List.IndexOf(item);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void IList<T>.Insert(int index, T item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "insert", "PersistentList insert"))
             {
-                _Semaphore.Wait();
-                _List.Insert(index, item);
-                RewritePersistenceFile();
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    _List.Insert(index, item);
+                    CollectionTelemetry.AddItems(_CollectionType, 1);
+                    RewritePersistenceFile();
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void IList<T>.RemoveAt(int index)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "remove_at", "PersistentList remove_at"))
             {
-                _Semaphore.Wait();
-                _List.RemoveAt(index);
-                RewritePersistenceFile();
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    _List.RemoveAt(index);
+                    CollectionTelemetry.AddItems(_CollectionType, -1);
+                    RewritePersistenceFile();
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void ICollection<T>.Add(T item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "add", "PersistentList add"))
             {
-                _Semaphore.Wait();
-                _List.Add(item);
-                RewritePersistenceFile();
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    _List.Add(item);
+                    CollectionTelemetry.AddItems(_CollectionType, 1);
+                    RewritePersistenceFile();
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void ICollection<T>.Clear()
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "clear", "PersistentList clear"))
             {
-                _Semaphore.Wait();
-                _List.Clear();
-                ClearPersistenceFile();
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    CollectionTelemetry.AddItems(_CollectionType, -_List.Count);
+                    _List.Clear();
+                    ClearPersistenceFile();
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         bool ICollection<T>.Contains(T item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "contains", null))
             {
-                _Semaphore.Wait();
-                return _List.Contains(item);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    return _List.Contains(item);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         void ICollection<T>.CopyTo(T[] array, int arrayIndex)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "copy_to", null))
             {
-                _Semaphore.Wait();
-                _List.CopyTo(array, arrayIndex);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    _List.CopyTo(array, arrayIndex);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
         bool ICollection<T>.Remove(T item)
         {
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "remove", "PersistentList remove"))
             {
-                _Semaphore.Wait();
-
-                int index = _List.IndexOf(item);
-                if (index >= 0)
+                try
                 {
-                    _List.RemoveAt(index);
-                    RewritePersistenceFile();
-                    return true;
-                }
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
 
-                return false;
-            }
-            finally
-            {
-                _Semaphore.Release();
+                    int index = _List.IndexOf(item);
+                    if (index >= 0)
+                    {
+                        _List.RemoveAt(index);
+                        CollectionTelemetry.AddItems(_CollectionType, -1);
+                        RewritePersistenceFile();
+                        return true;
+                    }
+
+                    scope?.MarkMiss();
+                    return false;
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
         }
 
@@ -325,14 +437,22 @@
         {
             List<T> snapshot;
 
-            try
+            using (TelemetryScope scope = TelemetryScope.Operation(_CollectionType, "enumerate", null))
             {
-                _Semaphore.Wait();
-                snapshot = new List<T>(_List);
-            }
-            finally
-            {
-                _Semaphore.Release();
+                try
+                {
+                    _Semaphore.Wait();
+                    scope?.LockAcquired();
+                    snapshot = new List<T>(_List);
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
+                finally
+                {
+                    _Semaphore.Release();
+                }
             }
 
             return snapshot.GetEnumerator();
@@ -357,7 +477,12 @@
             {
                 if (disposing)
                 {
-                    if (_List != null) _List.Clear();
+                    CollectionTelemetry.AddInstance(_CollectionType, -1);
+                    if (_List != null)
+                    {
+                        CollectionTelemetry.AddItems(_CollectionType, -_List.Count);
+                        _List.Clear();
+                    }
                     _Semaphore?.Dispose();
                 }
 
@@ -382,39 +507,78 @@
 
         private void PopulateFromFile()
         {
-            lock (_PersistenceFileLock)
+            using (TelemetryScope scope = TelemetryScope.Persistence(_CollectionType, PersistentCollectionTelemetry.PersistenceRead, "PersistentList persistence.read", _FileName))
             {
-                if (_List == null) _List = new List<T>();
-                else _List.Clear();
+                try
+                {
+                    lock (_PersistenceFileLock)
+                    {
+                        if (_List == null) _List = new List<T>();
+                        else _List.Clear();
 
-                if (File.Exists(_PersistenceFile))
-                {
-                    _List = new List<T>(JsonSerializer.Deserialize<List<T>>(File.ReadAllText(_PersistenceFile)));
+                        if (File.Exists(_PersistenceFile))
+                        {
+                            string json = File.ReadAllText(_PersistenceFile);
+                            scope?.SetBytes(Encoding.UTF8.GetByteCount(json));
+                            _List = new List<T>(JsonSerializer.Deserialize<List<T>>(json));
+                        }
+                        else
+                        {
+                            _List = new List<T>();
+                        }
+                    }
+
+                    scope?.SetItemCount(_List.Count);
                 }
-                else
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
                 {
-                    _List = new List<T>();
+                    throw;
                 }
             }
         }
 
         private void RewritePersistenceFile()
         {
-            lock (_PersistenceFileLock)
+            using (TelemetryScope scope = TelemetryScope.Persistence(_CollectionType, PersistentCollectionTelemetry.PersistenceWrite, "PersistentList persistence.write", _FileName))
             {
-                string dir = Path.GetDirectoryName(_PersistenceFile);
-                if (!String.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllText(_PersistenceFile, JsonSerializer.Serialize(_List));
+                try
+                {
+                    lock (_PersistenceFileLock)
+                    {
+                        string dir = Path.GetDirectoryName(_PersistenceFile);
+                        if (!String.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(_List);
+                        File.WriteAllBytes(_PersistenceFile, bytes);
+
+                        scope?.SetBytes(bytes.Length);
+                        scope?.SetItemCount(_List.Count);
+                    }
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
+                }
             }
         }
 
         private void ClearPersistenceFile()
         {
-            lock (_PersistenceFileLock)
+            using (TelemetryScope scope = TelemetryScope.Persistence(_CollectionType, PersistentCollectionTelemetry.PersistenceTruncate, "PersistentList persistence.truncate", _FileName))
             {
-                using (StreamWriter writer = new StreamWriter(_PersistenceFile, false))
+                try
                 {
-                    // write nothing
+                    lock (_PersistenceFileLock)
+                    {
+                        using (StreamWriter writer = new StreamWriter(_PersistenceFile, false))
+                        {
+                            // write nothing
+                        }
+                    }
+                }
+                catch (Exception ex) when (TelemetryScope.Fail(scope, ex))
+                {
+                    throw;
                 }
             }
         }
