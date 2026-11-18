@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>netstandard2.0;netstandard2.1;net48;net8.0</TargetFrameworks>
-		<Version>2.2.1</Version>
+		<Version>2.2.2</Version>
 		<LangVersion>latest</LangVersion>
 		<ApplicationIcon>Assets\icon.ico</ApplicationIcon>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
@@ -11,17 +11,20 @@
 		<Title>PersistentCollection</Title>
 		<Authors>Joel Christner</Authors>
 		<Description>Lightweight, persistent, thread-safe, disk-based queue, stack, dictionary, and list, written in C#</Description>
-		<Copyright>(c)2025 Joel Christner</Copyright>
-		<PackageProjectUrl>https://github.com/jchristn/PQueue</PackageProjectUrl>
+		<Copyright>(c)2026 Joel Christner</Copyright>
+		<PackageProjectUrl>https://github.com/jchristn/PersistentCollection</PackageProjectUrl>
 		<PackageIcon>icon.png</PackageIcon>
-		<RepositoryUrl>https://github.com/jchristn/PersistentQueue</RepositoryUrl>
-		<RepositoryType>github</RepositoryType>
+		<RepositoryUrl>https://github.com/jchristn/PersistentCollection</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
 		<PackageTags>queue stack dictionary list persistent persistence disk opentelemetry metrics tracing</PackageTags>
 		<PackageReleaseNotes>Dependency updates: SerializationHelper 2.1.0, System.Text.Json 10.0.12. Built-in OpenTelemetry-compatible metrics and traces via System.Diagnostics Meter and ActivitySource named PersistentCollection. See TELEMETRY.md.</PackageReleaseNotes>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
 		<IncludeSymbols>True</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 	</PropertyGroup>
 
 	<ItemGroup>
